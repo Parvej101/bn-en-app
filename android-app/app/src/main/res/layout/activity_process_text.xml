@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_gravity="bottom"
+    android:layout_margin="12dp"
+    app:cardBackgroundColor="@color/card"
+    app:cardCornerRadius="24dp"
+    app:cardElevation="16dp"
+    app:strokeColor="@color/card_border"
+    app:strokeWidth="1dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="18dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="12dp">
+
+            <TextView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:gravity="center"
+                android:text="✨"
+                android:textSize="16sp" />
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:layout_marginStart="8dp"
+                android:text="BN-ENG In-App Assistant"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:textStyle="bold" />
+
+            <ImageButton
+                android:id="@+id/btnClose"
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:src="@android:drawable/ic_menu_close_clear_cancel"
+                app:tint="@color/text_secondary" />
+        </LinearLayout>
+
+        <!-- Loading indicator -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginVertical="24dp"
+            android:indeterminateTint="@color/primary" />
+
+        <!-- Result Container -->
+        <LinearLayout
+            android:id="@+id/containerResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <!-- Primary Text / Meaning -->
+            <TextView
+                android:id="@+id/tvHeaderLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="বাংলা অর্থ:"
+                android:textColor="@color/primary"
+                android:textSize="11sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvMainText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:layout_marginBottom="12dp"
+                android:textColor="@color/text_primary"
+                android:textSize="14sp"
+                android:lineSpacingExtra="3dp" />
+
+            <!-- Options Header -->
+            <TextView
+                android:id="@+id/tvOptionsLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="পছন্দের ইংরেজি রিপ্লাই বেছে নিন:"
+                android:textColor="@color/text_secondary"
+                android:textSize="11sp"
+                android:layout_marginBottom="8dp" />
+
+            <!-- Reply Option 1 (Casual) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOptionCasual"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:text="Casual Reply"
+                android:textAlignment="textStart"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                app:cornerRadius="12dp"
+                app:strokeColor="@color/card_border" />
+
+            <!-- Reply Option 2 (Professional) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOptionProfessional"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:text="Professional Reply"
+                android:textAlignment="textStart"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                app:cornerRadius="12dp"
+                app:strokeColor="@color/card_border" />
+
+            <!-- Reply Option 3 (Polite) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOptionPolite"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="6dp"
+                android:text="Polite Reply"
+                android:textAlignment="textStart"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                app:cornerRadius="12dp"
+                app:strokeColor="@color/card_border" />
+
+            <!-- Reply Option 4 (Short) -->
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnOptionConcise"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Short Reply"
+                android:textAlignment="textStart"
+                android:textColor="@color/text_primary"
+                android:textSize="12sp"
+                app:cornerRadius="12dp"
+                app:strokeColor="@color/card_border" />
+
+        </LinearLayout>
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

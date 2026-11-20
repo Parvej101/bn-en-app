@@ -1,0 +1,5 @@
+<resources>
+    <string name="app_name">BN-ENG AI Assistant</string>
+    <string name="action_process_text_label">✨ BN-ENG AI</string>
+    <string name="accessibility_service_description">WhatsApp ও Messenger-এ কোনো অ্যাপ সুইচিং ছাড়া সরাসরি বাংলিশ থেকে সুন্দর ইংরেজি রিপ্লাই বসানো এবং চ্যাট অনুবাদ করার জন্য BN-ENG AI Assistant কে এক্সেসিবিলিটি পারমিশন দিন।</string>
+</resources>
