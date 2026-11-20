@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    
+    <!-- Central Modern Glowing Rounded Badge -->
+    <path
+        android:fillColor="#25FFFFFF"
+        android:pathData="M34,28 h40 a12,12 0 0 1 12,12 v28 a12,12 0 0 1 -12,12 h-40 a12,12 0 0 1 -12,-12 v-28 a12,12 0 0 1 12,-12 z" />
+
+    <!-- Translation Arrows & Chat Bubble Symbol (Pure White) -->
+    <!-- Forward Arrow (Banglish -> English) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M38,44 h24 l-4,-4 l2.5,-2.5 l8.5,8.5 l-8.5,8.5 l-2.5,-2.5 l4,-4 h-24 z" />
+
+    <!-- Backward Arrow (English -> Bangla) -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M70,64 h-24 l4,4 l-2.5,2.5 l-8.5,-8.5 l8.5,-8.5 l2.5,2.5 l-4,4 h24 z" />
+
+    <!-- 4-Point Magic Sparkle Icon (Top Right) -->
+    <path
+        android:fillColor="#FACC15"
+        android:pathData="M74,32 Q74,38 80,38 Q74,38 74,44 Q74,38 68,38 Q74,38 74,32 Z" />
+
+    <!-- Micro Star (Bottom Left) -->
+    <path
+        android:fillColor="#67E8F9"
+        android:pathData="M32,68 Q32,72 36,72 Q32,72 32,76 Q32,72 28,72 Q32,72 32,68 Z" />
+
+</vector>
