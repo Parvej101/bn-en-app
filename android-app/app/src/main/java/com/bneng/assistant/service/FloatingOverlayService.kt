@@ -13,14 +13,12 @@ import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
-import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewConfiguration
 import android.view.WindowManager
-import android.widget.Button
 import android.widget.EditText
 import android.widget.FrameLayout
 import android.widget.LinearLayout
@@ -84,7 +82,21 @@ class FloatingOverlayService : Service() {
             .setSmallIcon(android.R.drawable.ic_menu_edit)
             .build()
 
-        startForeground(1001, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    1001,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE
+                )
+            } else {
+                startForeground(1001, notification)
+            }
+        } catch (_: Throwable) {
+            try {
+                startForeground(1001, notification)
+            } catch (_: Throwable) {}
+        }
     }
 
     private fun getOverlayLayoutType(): Int {
@@ -97,7 +109,7 @@ class FloatingOverlayService : Service() {
     }
 
     private fun setupFloatingBubble() {
-        val inflater = LayoutInflater.from(ContextThemeWrapper(this, R.style.Theme_BnEngAssistant))
+        val inflater = LayoutInflater.from(this)
         floatingView = inflater.inflate(R.layout.floating_bubble, null)
 
         val params = WindowManager.LayoutParams(
@@ -194,11 +206,19 @@ class FloatingOverlayService : Service() {
     }
 
     private fun showTranslatorOverlay(explicitText: String? = null) {
+        try {
+            showTranslatorOverlayInternal(explicitText)
+        } catch (e: Throwable) {
+            Toast.makeText(this, "ওভারলে ত্রুটি: ${e.javaClass.simpleName}: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun showTranslatorOverlayInternal(explicitText: String? = null) {
         // Capture active input box text & recently tapped message BEFORE opening our overlay window
         val activeInputText = BnEngAccessibilityService.instance?.getActiveInputText() ?: ""
         val tappedMessageText = BnEngAccessibilityService.instance?.getRecentSelectedMessage() ?: ""
 
-        val inflater = LayoutInflater.from(ContextThemeWrapper(this, R.style.Theme_BnEngAssistant))
+        val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.overlay_translator_sheet, null)
 
         val overlayParams = WindowManager.LayoutParams(
@@ -217,8 +237,8 @@ class FloatingOverlayService : Service() {
         val btnClose = view.findViewById<TextView>(R.id.btnOverlayClose)
         val tvProviderBadge = view.findViewById<TextView>(R.id.tvProviderBadge)
         val etInput = view.findViewById<EditText>(R.id.etOverlayInput)
-        val btnPaste = view.findViewById<Button>(R.id.btnOverlayPaste)
-        val btnTranslate = view.findViewById<Button>(R.id.btnOverlayTranslate)
+        val btnPaste = view.findViewById<TextView>(R.id.btnOverlayPaste)
+        val btnTranslate = view.findViewById<TextView>(R.id.btnOverlayTranslate)
         val layoutLoading = view.findViewById<LinearLayout>(R.id.layoutOverlayLoading)
         val tvError = view.findViewById<TextView>(R.id.tvOverlayError)
         val scrollResult = view.findViewById<ScrollView>(R.id.scrollOverlayResult)

@@ -20,6 +20,8 @@ object AiTranslatorClient {
         .build()
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
+    private var cachedGeminiModel: String? = null
+    private var cachedGroqModel: String? = null
 
     /**
      * Determines whether text is primarily English or Banglish/Bengali
@@ -220,7 +222,65 @@ Respond ONLY in strict JSON:
             "Expert Banglish to polished English translator. Do NOT put quotes around replies. Return strictly valid JSON with originalBanglish, detectedBanglishMeaning, replies (casual, professional, polite, concise)."
         }
 
-        val modelsToTry = listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+        val trimmedKey = apiKey.trim()
+        var modelsToTry = if (cachedGroqModel != null) {
+            mutableListOf(cachedGroqModel!!, "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+        } else {
+            mutableListOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+        }
+
+        if (cachedGroqModel == null) {
+            try {
+                val listReq = Request.Builder()
+                    .url("https://api.groq.com/openai/v1/models")
+                    .header("Authorization", "Bearer $trimmedKey")
+                    .get()
+                    .build()
+                val listResp = httpClient.newCall(listReq).execute()
+                if (listResp.code == 401 || listResp.code == 403) {
+                    val errBody = listResp.body?.string() ?: ""
+                    throw RuntimeException("আপনার Groq API Key টি সঠিক নয় (${listResp.code}): $errBody")
+                }
+                if (listResp.isSuccessful) {
+                    val listBody = listResp.body?.string()
+                    if (!listBody.isNullOrBlank()) {
+                        val root = gson.fromJson(listBody, JsonObject::class.java)
+                        val dataArr = root.getAsJsonArray("data")
+                        if (dataArr != null && dataArr.size() > 0) {
+                            val skip = listOf("whisper", "embed", "vision", "guard", "tts", "playai", "safeguard", "compound", "orpheus", "audio")
+                            val active = mutableListOf<String>()
+                            for (i in 0 until dataArr.size()) {
+                                val mObj = dataArr.get(i).asJsonObject
+                                val id = mObj.get("id")?.asString ?: continue
+                                val isActive = mObj.get("active")?.asBoolean ?: true
+                                val lower = id.lowercase()
+                                if (isActive && skip.none { lower.contains(it) }) {
+                                    active.add(id)
+                                }
+                            }
+                            if (active.isNotEmpty()) {
+                                active.sortBy { id ->
+                                    val l = id.lowercase()
+                                    when {
+                                        l.contains("llama-3.3") -> 0
+                                        l.contains("llama-4") -> 1
+                                        l.contains("versatile") -> 2
+                                        l.contains("instant") -> 3
+                                        l.contains("llama") -> 4
+                                        l.contains("qwen") -> 5
+                                        else -> 6
+                                    }
+                                }
+                                modelsToTry = active.take(4).toMutableList()
+                            }
+                        }
+                    }
+                }
+            } catch (e: RuntimeException) {
+                if (e.message?.contains("সঠিক নয়") == true) throw e
+            } catch (_: Exception) {}
+        }
+
         var lastException: Exception? = null
 
         for (model in modelsToTry) {
@@ -245,7 +305,7 @@ Respond ONLY in strict JSON:
                 val body = requestJson.toString().toRequestBody(JSON_MEDIA)
                 val request = Request.Builder()
                     .url("https://api.groq.com/openai/v1/chat/completions")
-                    .header("Authorization", "Bearer ${apiKey.trim()}")
+                    .header("Authorization", "Bearer $trimmedKey")
                     .post(body)
                     .build()
 
@@ -255,6 +315,8 @@ Respond ONLY in strict JSON:
                 if (!response.isSuccessful) {
                     throw RuntimeException("Groq ($model) error ${response.code}: $responseBody")
                 }
+
+                cachedGroqModel = model
 
                 val rootObj = gson.fromJson(responseBody, JsonObject::class.java)
                 val rawContent = rootObj.getAsJsonArray("choices")

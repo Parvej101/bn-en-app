@@ -1,6 +1,6 @@
 {
-  "versionCode": 6,
-  "versionName": "1.0.5",
+  "versionCode": 7,
+  "versionName": "1.0.6",
   "apkUrl": "https://github.com/Parvej101/bn-en-app/releases/download/latest-apk/BN-ENG-Assistant.apk",
-  "releaseNotes": "ইন-অ্যাপ ১-ক্লিক অটো আপডেট সিস্টেম, Ridmik শর্টকাট (/e, /b, /p) ও Tap-to-Select মেসেজ ক্যাপচার!"
+  "releaseNotes": "ফ্লোটিং বাটন ক্র্যাশ ফিক্স (MIUI/Android 14+), Groq অটো মডেল ডিসকভারি ফিক্স!"
 }
