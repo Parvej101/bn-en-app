@@ -3,13 +3,14 @@
     android:layout_width="56dp"
     android:layout_height="56dp"
     android:background="@drawable/rounded_brand_bg"
-    android:elevation="12dp">
+    android:elevation="12dp"
+    android:padding="2dp">
 
-    <TextView
-        android:id="@+id/tvBubbleIcon"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:text="✨"
-        android:textSize="24sp" />
+    <ImageView
+        android:id="@+id/ivBubbleLogo"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="BN-ENG AI Assistant"
+        android:scaleType="centerCrop"
+        android:src="@mipmap/ic_launcher_round" />
 </FrameLayout>

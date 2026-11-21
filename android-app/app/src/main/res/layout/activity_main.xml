@@ -23,13 +23,14 @@
             <FrameLayout
                 android:layout_width="48dp"
                 android:layout_height="48dp"
-                android:background="@drawable/rounded_brand_bg">
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:layout_gravity="center"
-                    android:text="✨"
-                    android:textSize="22sp" />
+                android:background="@drawable/rounded_brand_bg"
+                android:padding="2dp">
+                <ImageView
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:contentDescription="BN-ENG Assistant Logo"
+                    android:scaleType="centerCrop"
+                    android:src="@mipmap/ic_launcher_round" />
             </FrameLayout>
 
             <LinearLayout
