@@ -21,7 +21,7 @@ object AiTranslatorClient {
 
     private val JSON_MEDIA = "application/json; charset=utf-8".toMediaType()
     private var cachedGeminiModel: String? = null
-    private var cachedGroqModel: String? = null
+    private var cachedGroqModels: List<String> = emptyList()
 
     /**
      * Determines whether text is primarily English or Banglish/Bengali
@@ -223,13 +223,9 @@ Respond ONLY in strict JSON:
         }
 
         val trimmedKey = apiKey.trim()
-        var modelsToTry = if (cachedGroqModel != null) {
-            mutableListOf(cachedGroqModel!!, "llama-3.3-70b-versatile", "llama-3.1-8b-instant")
-        } else {
-            mutableListOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
-        }
+        var modelsToTry = cachedGroqModels.toMutableList()
 
-        if (cachedGroqModel == null) {
+        if (modelsToTry.isEmpty()) {
             try {
                 val listReq = Request.Builder()
                     .url("https://api.groq.com/openai/v1/models")
@@ -271,7 +267,8 @@ Respond ONLY in strict JSON:
                                         else -> 6
                                     }
                                 }
-                                modelsToTry = active.take(4).toMutableList()
+                                cachedGroqModels = active.take(4)
+                                modelsToTry = cachedGroqModels.toMutableList()
                             }
                         }
                     }
@@ -279,6 +276,10 @@ Respond ONLY in strict JSON:
             } catch (e: RuntimeException) {
                 if (e.message?.contains("সঠিক নয়") == true) throw e
             } catch (_: Exception) {}
+        }
+
+        if (modelsToTry.isEmpty()) {
+            modelsToTry = mutableListOf("llama-3.3-70b-versatile")
         }
 
         var lastException: Exception? = null
@@ -316,7 +317,10 @@ Respond ONLY in strict JSON:
                     throw RuntimeException("Groq ($model) error ${response.code}: $responseBody")
                 }
 
-                cachedGroqModel = model
+                // Promote working model to front of cache
+                if (cachedGroqModels.firstOrNull() != model) {
+                    cachedGroqModels = listOf(model) + cachedGroqModels.filter { it != model }
+                }
 
                 val rootObj = gson.fromJson(responseBody, JsonObject::class.java)
                 val rawContent = rootObj.getAsJsonArray("choices")

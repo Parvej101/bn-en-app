@@ -47,6 +47,12 @@ class BnEngAccessibilityService : AccessibilityService() {
 
     private var lastAutoPopupTime: Long = 0L
 
+    private val ignoredHintTexts = setOf(
+        "message", "type a message", "ask meta ai or search", "aa",
+        "write a message", "write a message...", "write a reply", "write a reply...",
+        "search", "reply", "add a caption..."
+    )
+
     private val ignoredUiLabels = setOf(
         "copy", "paste", "cut", "reply", "remove", "details", "pin", "report",
         "forward", "delete", "star", "send", "translate", "ask meta ai",
@@ -78,6 +84,46 @@ class BnEngAccessibilityService : AccessibilityService() {
         return t.length >= 28 && !t.contains(" ") && !t.contains("\n") && !t.startsWith("http")
     }
 
+    private fun cleanMetaBusinessMessage(raw: String): String {
+        var text = raw.trim()
+        val markerIdx = text.indexOf(", double tap to see sent/receive date and time", ignoreCase = true)
+        if (markerIdx > 0) {
+            text = text.substring(0, markerIdx).trim()
+            // Strip leading sender name like "Nazmul, " or "Fluffy Touch Care, "
+            val firstComma = text.indexOf(", ")
+            if (firstComma in 1..35 && firstComma + 2 < text.length) {
+                text = text.substring(firstComma + 2).trim()
+            }
+        }
+        return text
+    }
+
+    /**
+     * Scans the current Meta Business Suite / Messenger screen to find the latest visible message.
+     */
+    fun getLatestScreenMessage(): String {
+        val root = rootInActiveWindow ?: return ""
+        val pkg = root.packageName?.toString() ?: ""
+        if (pkg != "com.facebook.pages.app" && pkg != "com.facebook.orca") return ""
+
+        val messages = mutableListOf<String>()
+        fun scan(n: AccessibilityNodeInfo?, depth: Int) {
+            if (n == null || depth > 12) return
+            val t = n.text?.toString()?.trim() ?: n.contentDescription?.toString()?.trim() ?: ""
+            if (t.contains("double tap to see sent/receive date and time", ignoreCase = true)) {
+                val cleaned = cleanMetaBusinessMessage(t)
+                if (cleaned.length >= 3 && !isSensitiveSecret(cleaned)) {
+                    messages.add(cleaned)
+                }
+            }
+            for (i in 0 until n.childCount) {
+                scan(n.getChild(i), depth + 1)
+            }
+        }
+        scan(root, 0)
+        return messages.lastOrNull() ?: ""
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val source = event.source ?: return
@@ -99,20 +145,23 @@ class BnEngAccessibilityService : AccessibilityService() {
                         }
                     }
                     if (extracted.isNotBlank()) {
-                        lastSelectedMessageText = extracted
-                        lastSelectedMessageTime = System.currentTimeMillis()
+                        val isMetaMessage = extracted.contains("double tap to see sent/receive date and time", ignoreCase = true)
+                        val cleanedExtracted = cleanMetaBusinessMessage(extracted)
+                        if (cleanedExtracted.isNotBlank() && !ignoredHintTexts.contains(cleanedExtracted.lowercase())) {
+                            lastSelectedMessageText = cleanedExtracted
+                            lastSelectedMessageTime = System.currentTimeMillis()
 
-                        // In WhatsApp / Meta Business Suite / Messenger: long-pressing (selecting) a message
-                        // immediately opens the Bangla translation & reply popup — ZERO copy/paste needed!
-                        val pkg = event.packageName?.toString() ?: ""
-                        val now = System.currentTimeMillis()
-                        if (event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED &&
-                            chatPackages.contains(pkg) &&
-                            extracted.length >= 4 &&
-                            now - lastAutoPopupTime > 1500L
-                        ) {
-                            lastAutoPopupTime = now
-                            openPopupOnDemand(extracted)
+                            // In WhatsApp / Meta Business Suite / Messenger:
+                            // Long-press OR tapping a Meta Business Suite message bubble opens Bangla popup directly!
+                            val pkg = event.packageName?.toString() ?: ""
+                            val now = System.currentTimeMillis()
+                            val shouldAutoPopup = (event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED && chatPackages.contains(pkg)) ||
+                                (isMetaMessage && (pkg == "com.facebook.pages.app" || pkg == "com.facebook.orca"))
+
+                            if (shouldAutoPopup && cleanedExtracted.length >= 4 && now - lastAutoPopupTime > 1500L) {
+                                lastAutoPopupTime = now
+                                openPopupOnDemand(cleanedExtracted)
+                            }
                         }
                     }
                 } else {
@@ -127,14 +176,17 @@ class BnEngAccessibilityService : AccessibilityService() {
             }
 
             AccessibilityEvent.TYPE_VIEW_TEXT_CHANGED -> {
-                if (source.isEditable) {
+                if (source.isEditable && !source.isShowingHintText) {
                     lastEditableNode = source
                     val currentText = source.text?.toString() ?: ""
                     val trimmed = currentText.trim()
-                    if (trimmed.isNotBlank() && !isSensitiveSecret(trimmed)) {
+                    if (trimmed.isNotBlank() &&
+                        !isSensitiveSecret(trimmed) &&
+                        !ignoredHintTexts.contains(trimmed.lowercase())
+                    ) {
                         lastCapturedText = trimmed
                     }
-                    if (!isSensitiveSecret(trimmed)) {
+                    if (!isSensitiveSecret(trimmed) && !ignoredHintTexts.contains(trimmed.lowercase())) {
                         handleKeyboardShortcutIfPresent(source, currentText)
                     }
                 }
@@ -344,9 +396,12 @@ class BnEngAccessibilityService : AccessibilityService() {
      */
     fun getActiveInputText(): String {
         val editable = getFocusedOrEditableNode()
-        if (editable == null || editable.isPassword) return ""
+        if (editable == null || editable.isPassword || editable.isShowingHintText) return ""
         val liveText = editable.text?.toString()?.trim() ?: ""
-        if (liveText.isNotBlank() && !isSensitiveSecret(liveText)) {
+        if (liveText.isNotBlank() &&
+            !isSensitiveSecret(liveText) &&
+            !ignoredHintTexts.contains(liveText.lowercase())
+        ) {
             lastCapturedText = liveText
             return liveText
         }

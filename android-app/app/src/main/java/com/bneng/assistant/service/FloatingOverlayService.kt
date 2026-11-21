@@ -368,6 +368,7 @@ class FloatingOverlayService : Service() {
     private fun showTranslatorOverlayInternal(explicitText: String? = null) {
         val activeInputText = BnEngAccessibilityService.instance?.getActiveInputText() ?: ""
         val tappedMessageText = BnEngAccessibilityService.instance?.getRecentSelectedMessage() ?: ""
+        val latestScreenMessage = BnEngAccessibilityService.instance?.getLatestScreenMessage() ?: ""
 
         val inflater = LayoutInflater.from(this)
         val view = inflater.inflate(R.layout.overlay_translator_sheet, null)
@@ -516,8 +517,8 @@ class FloatingOverlayService : Service() {
                 explicitText?.trim() ?: "",
                 activeInputText,
                 tappedMessageText,
-                readClipboardText(),
-                BnEngAccessibilityService.instance?.lastCapturedText ?: ""
+                latestScreenMessage,
+                readClipboardText()
             )
             val initialText = candidates.firstOrNull { it.isNotBlank() && !isSensitiveSecret(it) } ?: ""
             if (initialText.isNotBlank()) {

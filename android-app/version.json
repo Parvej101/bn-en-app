@@ -1,6 +1,6 @@
 {
-  "versionCode": 11,
-  "versionName": "2.0.0",
+  "versionCode": 12,
+  "versionName": "2.0.1",
   "apkUrl": "https://github.com/Parvej101/bn-en-app/releases/download/latest-apk/BN-ENG-Assistant.apk",
-  "releaseNotes": "v2.0.0: Messenger-স্টাইল ছোট 44dp গোল বাবল + নিচে টেনে ✕ দিয়ে বন্ধ করা + কিনারায় অটো-স্ন্যাপ + /f, /e, /b, /p ফুল কন্ট্রোল শর্টকাট!"
+  "releaseNotes": "v2.0.1: Meta Business Suite অটো মেসেজ রিড ফিক্স, খালি বক্সে 'Message' হিন্ট ফিল্টার ও Groq একটিভ মডেল ক্যাশ ফিক্স!"
 }
