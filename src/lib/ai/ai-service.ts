@@ -171,8 +171,25 @@ function cleanQuotes(str: string): string {
   return str.replace(/^["'“”‘’]+|["'“”‘’]+$/g, "").trim();
 }
 
+function extractJsonObject(rawText: string): Record<string, unknown> {
+  const cleaned = rawText
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/```json\s*/gi, "")
+    .replace(/```\s*/g, "")
+    .trim();
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+  if (firstBrace === -1 || lastBrace === -1 || lastBrace <= firstBrace) {
+    throw new Error("AI response did not contain valid JSON");
+  }
+  return JSON.parse(cleaned.slice(firstBrace, lastBrace + 1));
+}
+
+let cachedGeminiModel: string | null = null;
+let cachedGroqModel: string | null = null;
+
 /**
- * Call Google Gemini API with fallback across standard models (gemini-2.0-flash, gemini-1.5-flash, etc.)
+ * Call Google Gemini API with fast model priority & caching
  */
 export async function callGeminiApi(
   text: string,
@@ -216,17 +233,64 @@ Provide output ONLY in strict JSON format:
   }
 }`;
 
-  const modelsToTry = [
-    "gemini-2.0-flash",
-    "gemini-1.5-flash",
-    "gemini-2.5-flash"
-  ];
+  const trimmedKey = apiKey.trim();
+  let modelsToTry = cachedGeminiModel
+    ? [cachedGeminiModel, "gemini-3.8-flash", "gemini-2.0-flash", "gemini-flash-latest"]
+    : ["gemini-3.8-flash", "gemini-2.0-flash", "gemini-flash-latest"];
 
-  let lastError: Error | null = null;
+  if (!cachedGeminiModel) {
+    try {
+      const listRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(trimmedKey)}`
+      );
+      if (listRes.status === 400 || listRes.status === 401 || listRes.status === 403) {
+        const errBody = await listRes.text();
+        throw new Error(`আপনার Gemini API Key টি সঠিক নয় (${listRes.status}): ${errBody}`);
+      }
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const skipPatterns = ["tts", "image", "vision", "embedding", "aqa", "gemma", "audio", "live", "robotics", "computer-use", "learnlm"];
+        const discovered: string[] = (listData.models || [])
+          .filter((m: { supportedGenerationMethods?: string[]; name: string }) => {
+            const n = m.name.toLowerCase();
+            return (
+              m.supportedGenerationMethods?.includes("generateContent") &&
+              n.includes("gemini") &&
+              !skipPatterns.some((p) => n.includes(p))
+            );
+          })
+          .map((m: { name: string }) => m.name.replace("models/", ""));
+
+        if (discovered.length > 0) {
+          discovered.sort((a, b) => {
+            const score = (name: string) => {
+              if (name === "gemini-3.8-flash") return 0;
+              if (name.includes("3.8") && name.includes("flash")) return 1;
+              if (name === "gemini-2.0-flash") return 2;
+              if (name.includes("flash-lite")) return 3;
+              if (name.includes("flash") && !name.includes("thinking")) return 4;
+              if (name.includes("flash")) return 5;
+              return 6;
+            };
+            return score(a) - score(b);
+          });
+          modelsToTry = discovered.slice(0, 4);
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("API Key টি সঠিক নয়")) {
+        throw e;
+      }
+    }
+  }
+
+  // Deduplicate list
+  modelsToTry = [...new Set(modelsToTry)];
+  const errors: string[] = [];
 
   for (const modelName of modelsToTry) {
     try {
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${encodeURIComponent(trimmedKey)}`;
 
       const response = await fetch(url, {
         method: "POST",
@@ -240,27 +304,34 @@ Provide output ONLY in strict JSON format:
           ],
           generationConfig: {
             responseMimeType: "application/json",
-            temperature: 0.3,
+            temperature: 0.2,
+            maxOutputTokens: 512,
           },
         }),
       });
 
       if (!response.ok) {
         const errText = await response.text();
-        throw new Error(`Model ${modelName} returned status ${response.status}: ${errText}`);
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`API Key অনুমোদিত নয় (${response.status}): ${errText}`);
+        }
+        if (cachedGeminiModel === modelName) cachedGeminiModel = null;
+        errors.push(`${modelName} (${response.status})`);
+        continue;
       }
 
       const data = await response.json();
       const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!rawText) {
-        throw new Error("Empty response from Gemini");
+        errors.push(`${modelName} (empty response)`);
+        continue;
       }
 
-      const cleanJson = rawText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
-      const parsed = JSON.parse(cleanJson);
+      const parsed = extractJsonObject(rawText);
+      cachedGeminiModel = modelName;
 
       if (mode === "english_to_bangla") {
-        const bv = parsed as BanglaQuickView;
+        const bv = parsed as unknown as BanglaQuickView;
         if (bv.suggestedEnglishReplies) {
           bv.suggestedEnglishReplies.casual = cleanQuotes(bv.suggestedEnglishReplies.casual);
           bv.suggestedEnglishReplies.professional = cleanQuotes(bv.suggestedEnglishReplies.professional);
@@ -274,7 +345,7 @@ Provide output ONLY in strict JSON format:
           providerUsed: `Google Gemini (${modelName})`,
         };
       } else {
-        const br = parsed as BanglishToEnglishResponse;
+        const br = parsed as unknown as BanglishToEnglishResponse;
         if (br.replies) {
           br.replies.casual = cleanQuotes(br.replies.casual);
           br.replies.professional = cleanQuotes(br.replies.professional);
@@ -289,16 +360,17 @@ Provide output ONLY in strict JSON format:
         };
       }
     } catch (err: unknown) {
-      lastError = err instanceof Error ? err : new Error(String(err));
-      // continue to next model in list
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("অনুমোদিত নয়")) throw err;
+      errors.push(`${modelName}: ${msg}`);
     }
   }
 
-  throw lastError || new Error("All Gemini models failed.");
+  throw new Error(`Gemini সংযোগ ব্যর্থ (${errors.slice(0, 2).join(" | ")})`);
 }
 
 /**
- * Call Groq (Llama-3.3-70B-versatile) API
+ * Call Groq API with dynamic active models discovery
  */
 export async function callGroqApi(
   text: string,
@@ -307,7 +379,7 @@ export async function callGroqApi(
 ): Promise<TranslationApiResponse> {
   const systemPrompt =
     mode === "english_to_bangla"
-      ? `You are an expert bilingual English to Bangla translator for mobile chats. Respond in strictly valid JSON:
+      ? `You are an expert bilingual English to Bangla translator for mobile chats. Respond in strictly valid JSON format without quotes around replies:
 {
   "originalText": "...",
   "banglaTranslation": "natural, fluent conversational Bengali translation",
@@ -315,67 +387,146 @@ export async function callGroqApi(
   "sentiment": "friendly",
   "wordBreakdowns": [{"word": "example", "meaning": "উদাহরণ"}],
   "suggestedEnglishReplies": {
-    "casual": "...",
-    "professional": "...",
-    "polite": "...",
-    "concise": "..."
+    "casual": "friendly conversational reply",
+    "professional": "workplace professional reply",
+    "polite": "respectful and warm reply",
+    "concise": "short 3-5 word reply"
   }
 }`
-      : `You are an expert translator converting Banglish (Bengali in English alphabet) to polished English. Respond in strictly valid JSON:
+      : `You are an expert translator converting Banglish (Bengali in English alphabet) to polished English. Respond in strictly valid JSON format without quotes around replies:
 {
   "originalBanglish": "...",
   "detectedBanglishMeaning": "বাংলা অর্থ ও উদ্দেশ্যের এক লাইনের ব্যাখ্যা",
   "replies": {
-    "casual": "...",
-    "professional": "...",
-    "polite": "...",
-    "concise": "..."
+    "casual": "Natural English for friends/informal chats",
+    "professional": "Polished English for clients, bosses, or business",
+    "polite": "Courteous, gentle, and respectful English",
+    "concise": "Ultra brief, quick 3-7 word English"
   }
 }`;
 
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
-    },
-    body: JSON.stringify({
-      model: "llama-3.3-70b-versatile",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: text },
-      ],
-      response_format: { type: "json_object" },
-      temperature: 0.3,
-    }),
-  });
+  const trimmedKey = apiKey.trim();
+  let groqModels = cachedGroqModel
+    ? [cachedGroqModel, "llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    : ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"];
 
-  if (!response.ok) {
-    const errText = await response.text();
-    throw new Error(`Groq API Error (${response.status}): ${errText}`);
+  if (!cachedGroqModel) {
+    try {
+      const modelsResp = await fetch("https://api.groq.com/openai/v1/models", {
+        headers: { Authorization: `Bearer ${trimmedKey}` },
+      });
+      if (modelsResp.status === 401 || modelsResp.status === 403) {
+        const errBody = await modelsResp.text();
+        throw new Error(`আপনার Groq API Key টি সঠিক নয় (${modelsResp.status}): ${errBody}`);
+      }
+      if (modelsResp.ok) {
+        const modelsData = await modelsResp.json();
+        const skipPatterns = ["whisper", "embed", "vision", "guard", "tts", "playai", "safeguard", "compound", "orpheus"];
+        const active: string[] = (modelsData.data || [])
+          .filter((m: { active?: boolean; id: string }) => {
+            const id = m.id.toLowerCase();
+            return m.active !== false && !skipPatterns.some((p) => id.includes(p));
+          })
+          .map((m: { id: string }) => m.id);
+
+        if (active.length > 0) {
+          active.sort((a, b) => {
+            const score = (id: string) => {
+              if (id === "llama-3.3-70b-versatile") return 0;
+              if (id === "llama-3.1-8b-instant") return 1;
+              if (id.includes("llama-4")) return 2;
+              if (id.includes("llama")) return 3;
+              return 4;
+            };
+            return score(a) - score(b);
+          });
+          groqModels = active.slice(0, 4);
+        }
+      }
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("API Key টি সঠিক নয়")) {
+        throw e;
+      }
+    }
   }
 
-  const data = await response.json();
-  const rawContent = data?.choices?.[0]?.message?.content;
-  if (!rawContent) {
-    throw new Error("Empty response from Groq");
+  groqModels = [...new Set(groqModels)];
+
+  const errors: string[] = [];
+
+  for (const model of groqModels) {
+    try {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${trimmedKey}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: text },
+          ],
+          response_format: { type: "json_object" },
+          temperature: 0.3,
+        }),
+      });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        if (response.status === 401 || response.status === 403) {
+          throw new Error(`Groq API Key অনুমোদিত নয় (${response.status}): ${errText}`);
+        }
+        errors.push(`${model} (${response.status}): ${errText.slice(0, 120)}`);
+        continue;
+      }
+
+      const data = await response.json();
+      const rawContent = data?.choices?.[0]?.message?.content;
+      if (!rawContent) {
+        errors.push(`${model} (empty response)`);
+        continue;
+      }
+
+      const parsed = extractJsonObject(rawContent);
+      cachedGroqModel = model;
+
+      if (mode === "english_to_bangla") {
+        const bv = parsed as unknown as BanglaQuickView;
+        if (bv.suggestedEnglishReplies) {
+          bv.suggestedEnglishReplies.casual = cleanQuotes(bv.suggestedEnglishReplies.casual);
+          bv.suggestedEnglishReplies.professional = cleanQuotes(bv.suggestedEnglishReplies.professional);
+          bv.suggestedEnglishReplies.polite = cleanQuotes(bv.suggestedEnglishReplies.polite);
+          bv.suggestedEnglishReplies.concise = cleanQuotes(bv.suggestedEnglishReplies.concise);
+        }
+        return {
+          success: true,
+          mode: "english_to_bangla",
+          banglaView: bv,
+          providerUsed: `Groq (${model})`,
+        };
+      } else {
+        const br = parsed as unknown as BanglishToEnglishResponse;
+        if (br.replies) {
+          br.replies.casual = cleanQuotes(br.replies.casual);
+          br.replies.professional = cleanQuotes(br.replies.professional);
+          br.replies.polite = cleanQuotes(br.replies.polite);
+          br.replies.concise = cleanQuotes(br.replies.concise);
+        }
+        return {
+          success: true,
+          mode: "banglish_to_english",
+          banglishReplies: br,
+          providerUsed: `Groq (${model})`,
+        };
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("অনুমোদিত নয়")) throw err;
+      errors.push(`${model}: ${msg}`);
+    }
   }
 
-  const parsed = JSON.parse(rawContent);
-
-  if (mode === "english_to_bangla") {
-    return {
-      success: true,
-      mode: "english_to_bangla",
-      banglaView: parsed as BanglaQuickView,
-      providerUsed: "Groq (llama-3.3-70b-versatile)",
-    };
-  } else {
-    return {
-      success: true,
-      mode: "banglish_to_english",
-      banglishReplies: parsed as BanglishToEnglishResponse,
-      providerUsed: "Groq (llama-3.3-70b-versatile)",
-    };
-  }
+  throw new Error(`Groq সংযোগ ব্যর্থ (${errors.slice(0, 2).join(" | ")})`);
 }

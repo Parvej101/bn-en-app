@@ -98,7 +98,51 @@ Respond ONLY in strict JSON:
 }"""
         }
 
-        val modelsToTry = listOf("gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash")
+        var modelsToTry = mutableListOf("gemini-3.8-flash", "gemini-2.0-flash", "gemini-flash-latest")
+        try {
+            val listReq = Request.Builder().url("https://generativelanguage.googleapis.com/v1beta/models?key=$apiKey").get().build()
+            val listResp = httpClient.newCall(listReq).execute()
+            if (listResp.isSuccessful) {
+                val listBody = listResp.body?.string()
+                if (!listBody.isNullOrBlank()) {
+                    val root = gson.fromJson(listBody, JsonObject::class.java)
+                    val modelsArr = root.getAsJsonArray("models")
+                    if (modelsArr != null && modelsArr.size() > 0) {
+                        val skip = listOf("tts", "image", "vision", "embedding", "aqa", "gemma", "audio", "live", "robotics")
+                        val discovered = mutableListOf<String>()
+                        for (i in 0 until modelsArr.size()) {
+                            val mObj = modelsArr.get(i).asJsonObject
+                            val name = mObj.get("name")?.asString?.replace("models/", "") ?: ""
+                            val lower = name.lowercase()
+                            val methods = mObj.getAsJsonArray("supportedGenerationMethods")
+                            var canGen = false
+                            if (methods != null) {
+                                for (j in 0 until methods.size()) {
+                                    if (methods.get(j).asString == "generateContent") canGen = true
+                                }
+                            }
+                            if (canGen && lower.contains("gemini") && skip.none { lower.contains(it) }) {
+                                discovered.add(name)
+                            }
+                        }
+                        if (discovered.isNotEmpty()) {
+                            discovered.sortBy {
+                                when {
+                                    it == "gemini-3.8-flash" -> 0
+                                    it.contains("3.8") && it.contains("flash") -> 1
+                                    it == "gemini-2.0-flash" -> 2
+                                    it.contains("flash-lite") -> 3
+                                    it.contains("flash") -> 4
+                                    else -> 5
+                                }
+                            }
+                            modelsToTry = discovered.take(4).toMutableList()
+                        }
+                    }
+                }
+            }
+        } catch (_: Exception) {}
+
         var lastException: Exception? = null
 
         for (model in modelsToTry) {
@@ -169,49 +213,74 @@ Respond ONLY in strict JSON:
 
     private fun callGroq(text: String, apiKey: String, isEnglish: Boolean): TranslationResult {
         val systemPrompt = if (isEnglish) {
-            "Expert English to Bengali translator. Return strictly valid JSON with originalText, banglaTranslation, contextSummary, sentiment, suggestedEnglishReplies (casual, professional, polite, concise)."
+            "Expert English to Bengali translator. Do NOT put quotes around replies. Return strictly valid JSON with originalText, banglaTranslation, contextSummary, sentiment, suggestedEnglishReplies (casual, professional, polite, concise)."
         } else {
-            "Expert Banglish to polished English translator. Return strictly valid JSON with originalBanglish, detectedBanglishMeaning, replies (casual, professional, polite, concise)."
+            "Expert Banglish to polished English translator. Do NOT put quotes around replies. Return strictly valid JSON with originalBanglish, detectedBanglishMeaning, replies (casual, professional, polite, concise)."
         }
 
-        val requestJson = JsonObject().apply {
-            addProperty("model", "llama-3.3-70b-versatile")
-            val messagesArr = com.google.gson.JsonArray().apply {
-                add(JsonObject().apply {
-                    addProperty("role", "system")
-                    addProperty("content", systemPrompt)
-                })
-                add(JsonObject().apply {
-                    addProperty("role", "user")
-                    addProperty("content", text)
-                })
+        val modelsToTry = listOf("llama-3.3-70b-versatile", "llama-3.1-8b-instant")
+        var lastException: Exception? = null
+
+        for (model in modelsToTry) {
+            try {
+                val requestJson = JsonObject().apply {
+                    addProperty("model", model)
+                    val messagesArr = com.google.gson.JsonArray().apply {
+                        add(JsonObject().apply {
+                            addProperty("role", "system")
+                            addProperty("content", systemPrompt)
+                        })
+                        add(JsonObject().apply {
+                            addProperty("role", "user")
+                            addProperty("content", text)
+                        })
+                    }
+                    add("messages", messagesArr)
+                    add("response_format", JsonObject().apply { addProperty("type", "json_object") })
+                    addProperty("temperature", 0.3)
+                }
+
+                val body = requestJson.toString().toRequestBody(JSON_MEDIA)
+                val request = Request.Builder()
+                    .url("https://api.groq.com/openai/v1/chat/completions")
+                    .header("Authorization", "Bearer ${apiKey.trim()}")
+                    .post(body)
+                    .build()
+
+                val response = httpClient.newCall(request).execute()
+                val responseBody = response.body?.string() ?: throw RuntimeException("Empty response")
+
+                if (!response.isSuccessful) {
+                    throw RuntimeException("Groq ($model) error ${response.code}: $responseBody")
+                }
+
+                val rootObj = gson.fromJson(responseBody, JsonObject::class.java)
+                val rawContent = rootObj.getAsJsonArray("choices")
+                    ?.get(0)?.asJsonObject
+                    ?.getAsJsonObject("message")
+                    ?.get("content")?.asString ?: throw RuntimeException("Cannot parse Groq choice")
+
+                val cleanJson = rawContent.replace("^```json\\s*".toRegex(), "").replace("\\s*```$".toRegex(), "").trim()
+                fun clean(s: String?) = s?.trim('\"', '\'', '“', '”') ?: ""
+
+                return if (isEnglish) {
+                    val res = gson.fromJson(cleanJson, BanglaQuickViewResponse::class.java)
+                    val cleanReplies = res.suggestedEnglishReplies?.let {
+                        SuggestedEnglishReplies(clean(it.casual), clean(it.professional), clean(it.polite), clean(it.concise))
+                    }
+                    TranslationResult.EnglishToBangla(res.copy(suggestedEnglishReplies = cleanReplies))
+                } else {
+                    val res = gson.fromJson(cleanJson, BanglishToEnglishResponse::class.java)
+                    val cleanReplies = SuggestedEnglishReplies(
+                        clean(res.replies.casual), clean(res.replies.professional), clean(res.replies.polite), clean(res.replies.concise)
+                    )
+                    TranslationResult.BanglishToEnglish(res.copy(replies = cleanReplies))
+                }
+            } catch (e: Exception) {
+                lastException = e
             }
-            add("messages", messagesArr)
-            add("response_format", JsonObject().apply { addProperty("type", "json_object") })
-            addProperty("temperature", 0.3)
         }
-
-        val body = requestJson.toString().toRequestBody(JSON_MEDIA)
-        val request = Request.Builder()
-            .url("https://api.groq.com/openai/v1/chat/completions")
-            .header("Authorization", "Bearer $apiKey")
-            .post(body)
-            .build()
-
-        val response = httpClient.newCall(request).execute()
-        val responseBody = response.body?.string() ?: throw RuntimeException("Empty response")
-
-        val rootObj = gson.fromJson(responseBody, JsonObject::class.java)
-        val rawContent = rootObj.getAsJsonArray("choices")
-            ?.get(0)?.asJsonObject
-            ?.getAsJsonObject("message")
-            ?.get("content")?.asString ?: throw RuntimeException("Cannot parse Groq choice")
-
-        return if (isEnglish) {
-            TranslationResult.EnglishToBangla(gson.fromJson(rawContent, BanglaQuickViewResponse::class.java))
-        } else {
-            TranslationResult.BanglishToEnglish(gson.fromJson(rawContent, BanglishToEnglishResponse::class.java))
-        }
+        throw lastException ?: RuntimeException("All Groq models failed")
     }
 
     private fun getMockResponse(text: String, isEnglish: Boolean): TranslationResult {

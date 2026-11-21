@@ -98,6 +98,11 @@ export function FloatingOverlayModal({
           <div className="py-6 text-center text-xs text-muted-foreground">
             কোনো ডাটা পাওয়া যায়নি।
           </div>
+        ) : data.error ? (
+          <div className="py-6 px-3 text-center space-y-2">
+            <p className="text-xs font-semibold text-red-400">ত্রুটি ঘটেছে</p>
+            <p className="text-xs text-muted-foreground leading-relaxed">{data.error}</p>
+          </div>
         ) : data.mode === "english_to_bangla" && data.banglaView ? (
           /* English ➔ Bangla Quick View Mode */
           <div className="pt-3 space-y-3 max-h-[340px] overflow-y-auto pr-1">

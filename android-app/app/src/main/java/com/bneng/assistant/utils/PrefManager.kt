@@ -7,13 +7,20 @@ class PrefManager(context: Context) {
     private val prefs: SharedPreferences =
         context.getSharedPreferences("bn_eng_assistant_prefs", Context.MODE_PRIVATE)
 
-    var apiKey: String
-        get() = prefs.getString("api_key", "") ?: ""
-        set(value) = prefs.edit().putString("api_key", value).apply()
+    var geminiApiKey: String
+        get() = prefs.getString("gemini_api_key", prefs.getString("api_key", "")) ?: ""
+        set(value) = prefs.edit().putString("gemini_api_key", value).apply()
+
+    var groqApiKey: String
+        get() = prefs.getString("groq_api_key", "") ?: ""
+        set(value) = prefs.edit().putString("groq_api_key", value).apply()
 
     var provider: String
         get() = prefs.getString("provider", "gemini") ?: "gemini"
         set(value) = prefs.edit().putString("provider", value).apply()
+
+    val apiKey: String
+        get() = if (provider == "groq") groqApiKey else geminiApiKey
 
     var isFloatingEnabled: Boolean
         get() = prefs.getBoolean("floating_enabled", false)

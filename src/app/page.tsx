@@ -18,37 +18,45 @@ import { ApkDownloadGuide } from "@/components/dashboard/ApkDownloadGuide";
 import { ApiKeySettingsModal } from "@/components/dashboard/ApiKeySettingsModal";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { BrandLogo } from "@/components/ui/BrandLogo";
 import { AIProvider } from "@/types/assistant.types";
 import { cn } from "@/lib/utils";
 
 export default function HomePage() {
   const [activeTab, setActiveTab] = React.useState<"simulator" | "translator" | "apk">("simulator");
   const [isSettingsOpen, setIsSettingsOpen] = React.useState(false);
-  const [apiKey, setApiKey] = React.useState<string>("");
+  const [geminiKey, setGeminiKey] = React.useState<string>("");
+  const [groqKey, setGroqKey] = React.useState<string>("");
   const [provider, setProvider] = React.useState<AIProvider>("gemini");
 
   // Load saved credentials from localStorage
   React.useEffect(() => {
     try {
-      const savedKey = localStorage.getItem("bn_eng_api_key");
+      const savedGemini = localStorage.getItem("bn_eng_gemini_key") || localStorage.getItem("bn_eng_api_key");
+      const savedGroq = localStorage.getItem("bn_eng_groq_key");
       const savedProvider = localStorage.getItem("bn_eng_provider") as AIProvider;
-      if (savedKey) setApiKey(savedKey);
+      if (savedGemini) setGeminiKey(savedGemini);
+      if (savedGroq) setGroqKey(savedGroq);
       if (savedProvider) setProvider(savedProvider);
     } catch (e) {
       console.warn("Could not read local storage:", e);
     }
   }, []);
 
-  const handleSaveSettings = (newKey: string, newProvider: AIProvider) => {
-    setApiKey(newKey);
+  const handleSaveSettings = (newGeminiKey: string, newGroqKey: string, newProvider: AIProvider) => {
+    setGeminiKey(newGeminiKey);
+    setGroqKey(newGroqKey);
     setProvider(newProvider);
     try {
-      localStorage.setItem("bn_eng_api_key", newKey);
+      localStorage.setItem("bn_eng_gemini_key", newGeminiKey);
+      localStorage.setItem("bn_eng_groq_key", newGroqKey);
       localStorage.setItem("bn_eng_provider", newProvider);
     } catch (e) {
       console.warn("Could not save to local storage:", e);
     }
   };
+
+  const activeApiKey = provider === "gemini" ? geminiKey : groqKey;
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -56,9 +64,7 @@ export default function HomePage() {
       <header className="sticky top-0 z-40 w-full border-b border-border/70 bg-card/80 backdrop-blur-md">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-2xl bg-gradient-to-tr from-primary to-accent text-primary-foreground flex items-center justify-center shadow-sm">
-              <Sparkles className="h-5 w-5" />
-            </div>
+            <BrandLogo size="md" />
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-base font-bold tracking-tight text-foreground">
@@ -82,7 +88,7 @@ export default function HomePage() {
             >
               <Cpu className="h-3.5 w-3.5 text-primary" />
               <span className="font-medium capitalize">
-                {apiKey ? provider : "Demo AI Engine"}
+                {activeApiKey ? provider : "No Key Set"}
               </span>
               <span className="h-1.5 w-1.5 rounded-full bg-primary" />
             </button>
@@ -196,7 +202,7 @@ export default function HomePage() {
               <div className="p-4 rounded-2xl bg-muted/40 border border-border/60 flex items-center justify-between">
                 <div>
                   <span className="text-xs font-semibold text-foreground block">
-                    ইঞ্জিন: {apiKey ? (provider === "groq" ? "Groq Llama-3.3-70B" : "Gemini 2.5 Flash") : "স্মার্ট অফলাইন ডেমো ইঞ্জিন"}
+                    ইঞ্জিন: {activeApiKey ? (provider === "groq" ? "Groq AI (Llama-3.3)" : "Google Gemini") : "কোনো কী সেট করা নেই"}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
                     রিয়েল-টাইম সাব-সেকেন্ড রেসপন্স স্পিড
@@ -216,7 +222,7 @@ export default function HomePage() {
             {/* Right Column: Live Phone Mockup Frame */}
             <div className="lg:col-span-6 flex justify-center">
               <MobilePhoneFrame
-                apiKey={apiKey}
+                apiKey={activeApiKey}
                 provider={provider}
                 onOpenSettings={() => setIsSettingsOpen(true)}
               />
@@ -226,7 +232,7 @@ export default function HomePage() {
 
         {/* Tab 2: Standalone Web Translator */}
         {activeTab === "translator" && (
-          <StandaloneTranslator apiKey={apiKey} provider={provider} />
+          <StandaloneTranslator apiKey={activeApiKey} provider={provider} />
         )}
 
         {/* Tab 3: Android APK Download & CI/CD Guide */}
@@ -237,7 +243,8 @@ export default function HomePage() {
       <ApiKeySettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
-        apiKey={apiKey}
+        geminiKey={geminiKey}
+        groqKey={groqKey}
         provider={provider}
         onSave={handleSaveSettings}
       />

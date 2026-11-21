@@ -10,6 +10,7 @@ import {
   BookOpen,
   MessageSquare,
   Cpu,
+  AlertCircle,
 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -178,6 +179,14 @@ export function StandaloneTranslator({
               <p className="text-[11px] text-muted-foreground mt-1 max-w-xs">
                 বামে টেক্সট লিখে &quot;অনুবাদ ও রিপ্লাই তৈরি করুন&quot; বাটনে ক্লিক করলে ফলাফল এখানে দৃশ্যমান হবে।
               </p>
+            </div>
+          ) : result.error ? (
+            <div className="p-4 rounded-2xl bg-red-500/10 border border-red-500/30 text-red-400 space-y-2">
+              <div className="flex items-center gap-2 font-semibold text-xs">
+                <AlertCircle className="h-4 w-4" />
+                <span>ত্রুটি ঘটেছে</span>
+              </div>
+              <p className="text-xs opacity-90 leading-relaxed">{result.error}</p>
             </div>
           ) : result.mode === "english_to_bangla" && result.banglaView ? (
             <div className="space-y-4">

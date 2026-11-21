@@ -33,21 +33,35 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupUI() {
-        binding.etApiKey.setText(prefs.apiKey)
         if (prefs.provider == "groq") {
             binding.rbGroq.isChecked = true
+            binding.etApiKey.setText(prefs.groqApiKey)
         } else {
             binding.rbGemini.isChecked = true
+            binding.etApiKey.setText(prefs.geminiApiKey)
         }
         binding.switchFloating.isChecked = prefs.isFloatingEnabled
     }
 
     private fun setupListeners() {
+        // Switch API key box automatically when changing provider
+        binding.rgProvider.setOnCheckedChangeListener { _, checkedId ->
+            if (checkedId == binding.rbGroq.id) {
+                binding.etApiKey.setText(prefs.groqApiKey)
+            } else {
+                binding.etApiKey.setText(prefs.geminiApiKey)
+            }
+        }
+
         // Save API Key
         binding.btnSaveApiKey.setOnClickListener {
             val key = binding.etApiKey.text?.toString()?.trim() ?: ""
             val provider = if (binding.rbGroq.isChecked) "groq" else "gemini"
-            prefs.apiKey = key
+            if (provider == "groq") {
+                prefs.groqApiKey = key
+            } else {
+                prefs.geminiApiKey = key
+            }
             prefs.provider = provider
             Toast.makeText(this, "সেটিংস সফলভাবে সংরক্ষিত হয়েছে!", Toast.LENGTH_SHORT).show()
         }
@@ -66,7 +80,11 @@ class MainActivity : AppCompatActivity() {
                 return@setOnClickListener
             }
 
-            prefs.apiKey = key
+            if (provider == "groq") {
+                prefs.groqApiKey = key
+            } else {
+                prefs.geminiApiKey = key
+            }
             prefs.provider = provider
 
             val progressDialog = AlertDialog.Builder(this)

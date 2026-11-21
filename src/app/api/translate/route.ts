@@ -32,11 +32,15 @@ export async function POST(req: NextRequest) {
           return NextResponse.json(geminiResult);
         }
       } catch (apiError: unknown) {
-        console.error("Live AI call failed, falling back to smart engine:", apiError);
-        // Fallback gracefully so user experience is never broken
-        const fallbackResult = generateSmartMockResponse(text, mode);
-        fallbackResult.providerUsed = provider === "groq" ? "Groq AI (Fast)" : "Google Gemini";
-        return NextResponse.json(fallbackResult);
+        console.error("Live AI call failed:", apiError);
+        const msg = apiError instanceof Error ? apiError.message : String(apiError);
+        return NextResponse.json(
+          {
+            success: false,
+            error: `AI ইঞ্জিন ত্রুটি: ${msg}. অনুগ্রহ করে আপনার API Key টি চেক করুন।`,
+          },
+          { status: 400 }
+        );
       }
     }
 
@@ -60,9 +64,14 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Default to rich smart demo response engine
-    const demoResult = generateSmartMockResponse(text, mode);
-    return NextResponse.json(demoResult);
+    // If no key is provided, inform the user directly
+    return NextResponse.json(
+      {
+        success: false,
+        error: "কোনো API Key পাওয়া যায়নি। দয়া করে উপরে ডানপাশে 'API Key' বাটনে ক্লিক করে আপনার ফ্রি Gemini API Key টি দিন।",
+      },
+      { status: 401 }
+    );
   } catch (error: unknown) {
     console.error("Translation API error:", error);
     return NextResponse.json(

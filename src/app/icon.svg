@@ -1,0 +1,14 @@
+<svg viewBox="0 0 108 108" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bneng-fav" x1="0" y1="0" x2="108" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#10B981" />
+      <stop offset="55%" stop-color="#059669" />
+      <stop offset="100%" stop-color="#4F46E5" />
+    </linearGradient>
+  </defs>
+  <rect width="108" height="108" rx="24" fill="url(#bneng-fav)" />
+  <rect x="18" y="22" width="72" height="64" rx="16" fill="#FFFFFF" fill-opacity="0.16" />
+  <path d="M32 43H64L59 38L62.5 34.5L73.5 45.5L62.5 56.5L59 53L64 48H32V43Z" fill="#FFFFFF" />
+  <path d="M76 65H44L49 70L45.5 73.5L34.5 62.5L45.5 51.5L49 55L44 60H76V65Z" fill="#FFFFFF" />
+  <path d="M79 22L81.5 28.5L88 31L81.5 33.5L79 40L76.5 33.5L70 31L76.5 28.5L79 22Z" fill="#FACC15" />
+</svg>
