@@ -1,6 +1,6 @@
 {
-  "versionCode": 10,
-  "versionName": "1.0.9",
+  "versionCode": 11,
+  "versionName": "2.0.0",
   "apkUrl": "https://github.com/Parvej101/bn-en-app/releases/download/latest-apk/BN-ENG-Assistant.apk",
-  "releaseNotes": "পারফেক্ট গোল ভেক্টর ব্র্যান্ড লোগো (অ্যাপ, ফ্লোটিং বাবল ও পপআপ)!"
+  "releaseNotes": "v2.0.0: Messenger-স্টাইল ছোট 44dp গোল বাবল + নিচে টেনে ✕ দিয়ে বন্ধ করা + কিনারায় অটো-স্ন্যাপ + /f, /e, /b, /p ফুল কন্ট্রোল শর্টকাট!"
 }

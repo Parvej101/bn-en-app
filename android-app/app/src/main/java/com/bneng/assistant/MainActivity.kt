@@ -180,6 +180,39 @@ class MainActivity : AppCompatActivity() {
             checkForAppUpdate(silent = false)
         }
 
+        // Shortcuts & Usage Guide Page / Dialog
+        val openGuide = {
+            val guideText = """
+                ⚡ ১. ইনস্ট্যান্ট ইংরেজি অটো-রিপ্লেস (/e)
+                চ্যাট বক্সে বাংলিশ লিখে শেষে /e দিন।
+                উদাহরণ: "Dog service hobe /e"
+                ➔ ০.৩ সেকেন্ডে আপনার বাংলিশ মুছে সরাসরি সুন্দর ইংরেজি বসে যাবে!
+
+                📖 ২. বাংলা অর্থ পপআপ (/b)
+                যেকোনো ইংরেজি মেসেজে একবার ট্যাপ করুন, তারপর চ্যাট বক্সে /b লিখুন।
+                ➔ সাথে সাথে বাংলা অর্থ ও ৪টি ইংরেজি রিপ্লাই পপআপে দেখাবে!
+
+                🎯 ৩. ৪টি ভিন্ন টোনের রিপ্লাই (/p)
+                বাংলিশ লিখে শেষে /p দিন।
+                ➔ Casual, Professional, Polite ও Short — ৪টি অপশন দেখাবে, ১ ট্যাপেই রিপ্লেস!
+
+                ✨ ৪. ফ্লোটিং বাবল আনা ও বন্ধ করা (/f ও ✕)
+                • ফ্লোটিং বাবল আনতে চ্যাটে /f লিখুন (অথবা নোটিফিকেশনে ট্যাপ করুন)।
+                • দরকার না থাকলে বাবলটি টেনে নিচে লাল ✕-এ ছেড়ে দিন — সাথে সাথে বন্ধ হয়ে যাবে!
+
+                👆 ৫. কপি ছাড়াই মেসেজ অনুবাদ
+                WhatsApp, Meta Business Suite বা Messenger-এ যেকোনো মেসেজ লং-প্রেস (সিলেক্ট) করলেই সরাসরি বাংলা অর্থ পপআপ খুলে যাবে!
+            """.trimIndent()
+
+            AlertDialog.Builder(this)
+                .setTitle("⌨️ BN-ENG শর্টকাট ও ব্যবহারের নিয়ম")
+                .setMessage(guideText)
+                .setPositiveButton("বুঝেছি", null)
+                .show()
+        }
+        binding.btnOpenShortcutsGuide.setOnClickListener { openGuide() }
+        binding.cardShortcutsGuide.setOnClickListener { openGuide() }
+
         // 1-Click Update Now Banner Button
         binding.btnUpdateNow.setOnClickListener {
             val info = latestUpdateInfo

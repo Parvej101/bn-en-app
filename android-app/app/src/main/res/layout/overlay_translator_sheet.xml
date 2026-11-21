@@ -63,12 +63,15 @@
 
             <TextView
                 android:id="@+id/btnOverlayClose"
-                android:layout_width="32dp"
-                android:layout_height="32dp"
+                android:layout_width="36dp"
+                android:layout_height="36dp"
+                android:background="@drawable/overlay_close_btn_bg"
+                android:clickable="true"
+                android:focusable="true"
                 android:gravity="center"
                 android:text="✕"
-                android:textColor="#94A3B8"
-                android:textSize="18sp"
+                android:textColor="#FFFFFF"
+                android:textSize="16sp"
                 android:textStyle="bold" />
         </LinearLayout>
 
@@ -241,5 +244,14 @@
                     android:textSize="13sp" />
             </LinearLayout>
         </ScrollView>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:gravity="center"
+            android:text="Developed by MH Parvej"
+            android:textColor="#64748B"
+            android:textSize="10sp" />
     </LinearLayout>
 </FrameLayout>

@@ -4,6 +4,8 @@ import android.accessibilityservice.AccessibilityService
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
@@ -63,12 +65,26 @@ class BnEngAccessibilityService : AccessibilityService() {
         instance = null
     }
 
+    private fun isSensitiveSecret(text: String): Boolean {
+        val t = text.trim()
+        if (t.isBlank()) return false
+        val lower = t.lowercase()
+        if (lower.startsWith("gsk_") ||
+            lower.startsWith("aizasy") ||
+            lower.startsWith("sk-") ||
+            lower.startsWith("ghp_") ||
+            lower.startsWith("gho_")
+        ) return true
+        return t.length >= 28 && !t.contains(" ") && !t.contains("\n") && !t.startsWith("http")
+    }
+
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event == null) return
         val source = event.source ?: return
 
-        // Ignore events from our own app package
+        // Ignore events from our own app package or any password input field
         if (event.packageName?.toString() == packageName) return
+        if (source.isPassword) return
 
         when (event.eventType) {
             AccessibilityEvent.TYPE_VIEW_CLICKED,
@@ -96,7 +112,7 @@ class BnEngAccessibilityService : AccessibilityService() {
                             now - lastAutoPopupTime > 1500L
                         ) {
                             lastAutoPopupTime = now
-                            FloatingOverlayService.instance?.openWithText(extracted)
+                            openPopupOnDemand(extracted)
                         }
                     }
                 } else {
@@ -115,10 +131,12 @@ class BnEngAccessibilityService : AccessibilityService() {
                     lastEditableNode = source
                     val currentText = source.text?.toString() ?: ""
                     val trimmed = currentText.trim()
-                    if (trimmed.isNotBlank()) {
+                    if (trimmed.isNotBlank() && !isSensitiveSecret(trimmed)) {
                         lastCapturedText = trimmed
                     }
-                    handleKeyboardShortcutIfPresent(source, currentText)
+                    if (!isSensitiveSecret(trimmed)) {
+                        handleKeyboardShortcutIfPresent(source, currentText)
+                    }
                 }
             }
         }
@@ -171,24 +189,63 @@ class BnEngAccessibilityService : AccessibilityService() {
                 isProcessingShortcut = true
                 runInstantEnglishReplace(node, cleanInput)
             }
+            lower.endsWith("/f") -> {
+                val cleanInput = trimmed.dropLast(2).trim()
+                lastShortcutTimestamp = now
+                setNodeText(node, cleanInput)
+                summonFloatingBubbleOnDemand()
+            }
             lower.endsWith("/b") -> {
                 val cleanInput = trimmed.dropLast(2).trim()
                 lastShortcutTimestamp = now
-                // Clean "/b" from input box immediately
                 setNodeText(node, cleanInput)
                 val target = if (cleanInput.isNotBlank()) cleanInput else getRecentSelectedMessage()
-                FloatingOverlayService.instance?.openWithText(target)
-                    ?: Toast.makeText(this, "অনুগ্রহ করে Floating বাটন চালু রাখুন", Toast.LENGTH_SHORT).show()
+                openPopupOnDemand(target)
             }
             lower.endsWith("/p") -> {
                 val cleanInput = trimmed.dropLast(2).trim()
                 if (cleanInput.isBlank()) return
                 lastShortcutTimestamp = now
-                // Clean "/p" from input box immediately
                 setNodeText(node, cleanInput)
-                FloatingOverlayService.instance?.openWithText(cleanInput)
-                    ?: Toast.makeText(this, "অনুগ্রহ করে Floating বাটন চালু রাখুন", Toast.LENGTH_SHORT).show()
+                openPopupOnDemand(cleanInput)
             }
+        }
+    }
+
+    private fun summonFloatingBubbleOnDemand() {
+        val existing = FloatingOverlayService.instance
+        if (existing != null) {
+            existing.showFloatingBubble()
+        } else {
+            val intent = Intent(this, FloatingOverlayService::class.java).apply {
+                action = FloatingOverlayService.ACTION_SHOW_BUBBLE
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+            } catch (_: Throwable) {}
+        }
+    }
+
+    private fun openPopupOnDemand(targetText: String) {
+        val existing = FloatingOverlayService.instance
+        if (existing != null) {
+            existing.openWithText(targetText)
+        } else {
+            val intent = Intent(this, FloatingOverlayService::class.java).apply {
+                action = FloatingOverlayService.ACTION_OPEN_POPUP
+                putExtra(FloatingOverlayService.EXTRA_TEXT, targetText)
+            }
+            try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+            } catch (_: Throwable) {}
         }
     }
 
@@ -287,8 +344,9 @@ class BnEngAccessibilityService : AccessibilityService() {
      */
     fun getActiveInputText(): String {
         val editable = getFocusedOrEditableNode()
-        val liveText = editable?.text?.toString()?.trim() ?: ""
-        if (liveText.isNotBlank()) {
+        if (editable == null || editable.isPassword) return ""
+        val liveText = editable.text?.toString()?.trim() ?: ""
+        if (liveText.isNotBlank() && !isSensitiveSecret(liveText)) {
             lastCapturedText = liveText
             return liveText
         }

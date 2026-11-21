@@ -3,6 +3,7 @@ package com.bneng.assistant.service
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -41,7 +42,10 @@ class FloatingOverlayService : Service() {
 
     private var windowManager: WindowManager? = null
     private var floatingView: View? = null
+    private var dismissView: View? = null
     private var popupOverlayView: View? = null
+    private var isBubbleVisible: Boolean = false
+
     private lateinit var prefs: PrefManager
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -54,7 +58,43 @@ class FloatingOverlayService : Service() {
         prefs = PrefManager(this)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startAsForeground()
-        setupFloatingBubble()
+    }
+
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        when (intent?.action) {
+            ACTION_HIDE_BUBBLE -> {
+                hideFloatingBubble()
+            }
+            ACTION_OPEN_POPUP -> {
+                val text = intent.getStringExtra(EXTRA_TEXT)
+                openWithText(text)
+            }
+            ACTION_SHOW_BUBBLE, null -> {
+                showFloatingBubble()
+            }
+        }
+        return START_STICKY
+    }
+
+    fun showFloatingBubble() {
+        mainHandler.post {
+            if (!isBubbleVisible) {
+                setupFloatingBubble()
+            }
+        }
+    }
+
+    fun hideFloatingBubble() {
+        mainHandler.post {
+            hideDismissTarget()
+            floatingView?.let { v ->
+                try {
+                    windowManager?.removeView(v)
+                } catch (_: Exception) {}
+                floatingView = null
+            }
+            isBubbleVisible = false
+        }
     }
 
     fun openWithText(explicitText: String?) {
@@ -76,10 +116,22 @@ class FloatingOverlayService : Service() {
             manager.createNotificationChannel(channel)
         }
 
+        // Tapping notification brings back the floating bubble anytime!
+        val showIntent = Intent(this, FloatingOverlayService::class.java).apply {
+            action = ACTION_SHOW_BUBBLE
+        }
+        val pendingFlags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val showPendingIntent = PendingIntent.getService(this, 0, showIntent, pendingFlags)
+
         val notification: Notification = NotificationCompat.Builder(this, channelId)
-            .setContentTitle("BN-ENG AI Assistant চালু আছে")
-            .setContentText("ভাসমান বাটন ট্যাপ করে যেকোনো সময় অনুবাদ করুন")
+            .setContentTitle("BN-ENG AI Assistant প্রস্তুত")
+            .setContentText("ভাসমান বাটন আনতে এখানে ট্যাপ করুন অথবা চ্যাটে /f, /e, /b লিখুন")
             .setSmallIcon(android.R.drawable.ic_menu_edit)
+            .setContentIntent(showPendingIntent)
             .build()
 
         try {
@@ -108,70 +160,149 @@ class FloatingOverlayService : Service() {
         }
     }
 
-    private fun setupFloatingBubble() {
-        val inflater = LayoutInflater.from(this)
-        floatingView = inflater.inflate(R.layout.floating_bubble, null)
-
-        val params = WindowManager.LayoutParams(
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            WindowManager.LayoutParams.WRAP_CONTENT,
-            getOverlayLayoutType(),
-            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
-            PixelFormat.TRANSLUCENT
-        ).apply {
-            gravity = Gravity.TOP or Gravity.START
-            x = 40
-            y = 320
-        }
-
-        val touchSlop = maxOf(ViewConfiguration.get(this).scaledTouchSlop, 30)
-
-        floatingView?.setOnTouchListener(object : View.OnTouchListener {
-            private var initialX = 0
-            private var initialY = 0
-            private var initialTouchX = 0f
-            private var initialTouchY = 0f
-            private var isClick = true
-
-            override fun onTouch(v: View?, event: MotionEvent?): Boolean {
-                if (event == null) return false
-                when (event.action) {
-                    MotionEvent.ACTION_DOWN -> {
-                        initialX = params.x
-                        initialY = params.y
-                        initialTouchX = event.rawX
-                        initialTouchY = event.rawY
-                        isClick = true
-                        v?.animate()?.scaleX(0.9f)?.scaleY(0.9f)?.setDuration(80)?.start()
-                        return true
-                    }
-                    MotionEvent.ACTION_MOVE -> {
-                        val dx = (event.rawX - initialTouchX).toInt()
-                        val dy = (event.rawY - initialTouchY).toInt()
-                        if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
-                            isClick = false
-                        }
-                        if (!isClick) {
-                            params.x = initialX + dx
-                            params.y = initialY + dy
-                            windowManager?.updateViewLayout(floatingView, params)
-                        }
-                        return true
-                    }
-                    MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
-                        v?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(80)?.start()
-                        if (event.action == MotionEvent.ACTION_UP && isClick) {
-                            // Open overlay translator directly inside WindowManager (never blocked by MIUI/Android 10+!)
-                            toggleTranslatorOverlay()
-                        }
-                        return true
-                    }
-                }
-                return false
+    private fun showDismissTarget() {
+        if (dismissView != null) return
+        try {
+            val inflater = LayoutInflater.from(this)
+            val view = inflater.inflate(R.layout.overlay_dismiss_target, null)
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                getOverlayLayoutType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.BOTTOM or Gravity.CENTER_HORIZONTAL
+                y = 140
             }
-        })
+            dismissView = view
+            windowManager?.addView(view, params)
+        } catch (_: Throwable) {}
+    }
 
-        windowManager?.addView(floatingView, params)
+    private fun hideDismissTarget() {
+        dismissView?.let { v ->
+            try {
+                windowManager?.removeView(v)
+            } catch (_: Exception) {}
+            dismissView = null
+        }
+    }
+
+    private fun setupFloatingBubble() {
+        if (floatingView != null) return
+        try {
+            val inflater = LayoutInflater.from(this)
+            val bubble = inflater.inflate(R.layout.floating_bubble, null)
+            val dm = resources.displayMetrics
+            val screenWidth = dm.widthPixels
+            val screenHeight = dm.heightPixels
+            val bubbleSizePx = (44 * dm.density).toInt()
+
+            val params = WindowManager.LayoutParams(
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                WindowManager.LayoutParams.WRAP_CONTENT,
+                getOverlayLayoutType(),
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                PixelFormat.TRANSLUCENT
+            ).apply {
+                gravity = Gravity.TOP or Gravity.START
+                x = screenWidth - bubbleSizePx - 16
+                y = (screenHeight * 0.35f).toInt()
+            }
+
+            val touchSlop = maxOf(ViewConfiguration.get(this).scaledTouchSlop, 24)
+
+            bubble.setOnTouchListener(object : View.OnTouchListener {
+                private var initialX = 0
+                private var initialY = 0
+                private var initialTouchX = 0f
+                private var initialTouchY = 0f
+                private var isClick = true
+
+                override fun onTouch(v: View?, event: MotionEvent?): Boolean {
+                    if (event == null) return false
+                    when (event.action) {
+                        MotionEvent.ACTION_DOWN -> {
+                            initialX = params.x
+                            initialY = params.y
+                            initialTouchX = event.rawX
+                            initialTouchY = event.rawY
+                            isClick = true
+                            v?.animate()?.scaleX(0.9f)?.scaleY(0.9f)?.setDuration(80)?.start()
+                            return true
+                        }
+                        MotionEvent.ACTION_MOVE -> {
+                            val dx = (event.rawX - initialTouchX).toInt()
+                            val dy = (event.rawY - initialTouchY).toInt()
+                            if (abs(dx) > touchSlop || abs(dy) > touchSlop) {
+                                if (isClick) {
+                                    isClick = false
+                                    // Show Messenger-style bottom X dismiss circle when dragging!
+                                    showDismissTarget()
+                                }
+                            }
+                            if (!isClick) {
+                                params.x = initialX + dx
+                                params.y = initialY + dy
+                                try {
+                                    windowManager?.updateViewLayout(bubble, params)
+                                } catch (_: Exception) {}
+
+                                // Highlight dismiss X when bubble is near bottom-center
+                                val inDismissZone = isInsideDismissZone(event.rawX, event.rawY, screenWidth, screenHeight)
+                                dismissView?.animate()
+                                    ?.scaleX(if (inDismissZone) 1.25f else 1.0f)
+                                    ?.scaleY(if (inDismissZone) 1.25f else 1.0f)
+                                    ?.setDuration(100)
+                                    ?.start()
+                            }
+                            return true
+                        }
+                        MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                            v?.animate()?.scaleX(1f)?.scaleY(1f)?.setDuration(80)?.start()
+                            if (event.action == MotionEvent.ACTION_UP && isClick) {
+                                toggleTranslatorOverlay()
+                            } else {
+                                val shouldDismiss = isInsideDismissZone(event.rawX, event.rawY, screenWidth, screenHeight)
+                                hideDismissTarget()
+                                if (shouldDismiss) {
+                                    // Messenger-style dismiss! Bubble disappears cleanly until user summons it again (/f or notification)
+                                    hideFloatingBubble()
+                                    Toast.makeText(
+                                        this@FloatingOverlayService,
+                                        "ভাসমান বাটন লুকানো হয়েছে (আবার আনতে চ্যাটে /f লিখুন)",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    // Edge-snap to nearest left or right side of screen!
+                                    val centerX = params.x + bubbleSizePx / 2
+                                    params.x = if (centerX < screenWidth / 2) 12 else (screenWidth - bubbleSizePx - 12)
+                                    params.y = params.y.coerceIn(80, screenHeight - bubbleSizePx - 120)
+                                    try {
+                                        windowManager?.updateViewLayout(bubble, params)
+                                    } catch (_: Exception) {}
+                                }
+                            }
+                            return true
+                        }
+                    }
+                    return false
+                }
+            })
+
+            floatingView = bubble
+            isBubbleVisible = true
+            windowManager?.addView(bubble, params)
+        } catch (e: Throwable) {
+            Toast.makeText(this, "বাবল ত্রুটি: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun isInsideDismissZone(rawX: Float, rawY: Float, screenW: Int, screenH: Int): Boolean {
+        val targetX = screenW / 2f
+        val targetY = screenH - 220f
+        return abs(rawX - targetX) < 190f && abs(rawY - targetY) < 220f
     }
 
     private fun toggleTranslatorOverlay() {
@@ -191,12 +322,33 @@ class FloatingOverlayService : Service() {
         }
     }
 
+    private fun isSensitiveSecret(text: String): Boolean {
+        val t = text.trim()
+        if (t.isBlank()) return false
+        val lower = t.lowercase()
+        if (lower.startsWith("gsk_") ||
+            lower.startsWith("aizasy") ||
+            lower.startsWith("sk-") ||
+            lower.startsWith("ghp_") ||
+            lower.startsWith("gho_") ||
+            lower.startsWith("bearer ")
+        ) {
+            return true
+        }
+        // Long single token without spaces (API keys / tokens / passwords)
+        if (t.length >= 28 && !t.contains(" ") && !t.contains("\n") && !t.startsWith("http")) {
+            return true
+        }
+        return false
+    }
+
     private fun readClipboardText(): String {
         return try {
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
             val clip = clipboard.primaryClip
             if (clip != null && clip.itemCount > 0) {
-                clip.getItemAt(0).coerceToText(this)?.toString()?.trim() ?: ""
+                val raw = clip.getItemAt(0).coerceToText(this)?.toString()?.trim() ?: ""
+                if (isSensitiveSecret(raw)) "" else raw
             } else {
                 ""
             }
@@ -214,7 +366,6 @@ class FloatingOverlayService : Service() {
     }
 
     private fun showTranslatorOverlayInternal(explicitText: String? = null) {
-        // Capture active input box text & recently tapped message BEFORE opening our overlay window
         val activeInputText = BnEngAccessibilityService.instance?.getActiveInputText() ?: ""
         val tappedMessageText = BnEngAccessibilityService.instance?.getRecentSelectedMessage() ?: ""
 
@@ -250,7 +401,7 @@ class FloatingOverlayService : Service() {
         val btnPolite = view.findViewById<TextView>(R.id.btnOverlayPolite)
         val btnConcise = view.findViewById<TextView>(R.id.btnOverlayConcise)
 
-        val (effectiveProvider, effectiveKey) = prefs.getEffectiveProviderAndKey()
+        val (effectiveProvider, _) = prefs.getEffectiveProviderAndKey()
         tvProviderBadge.text = if (effectiveProvider == "groq") "Groq AI" else "Gemini AI"
 
         backdrop.setOnClickListener { hideTranslatorOverlay() }
@@ -265,14 +416,11 @@ class FloatingOverlayService : Service() {
             card.visibility = View.VISIBLE
             card.text = "$label\n$cleanText"
             card.setOnClickListener {
-                // 1. Copy clean English text to clipboard
                 val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                 clipboard.setPrimaryClip(ClipData.newPlainText("BN-ENG Reply", cleanText))
 
-                // 2. Close overlay FIRST so WhatsApp / Meta Business Suite regains window focus!
                 hideTranslatorOverlay()
 
-                // 3. Wait 180ms and auto-replace text in the chat box via AccessibilityService
                 mainHandler.postDelayed({
                     val replaced = BnEngAccessibilityService.instance?.replaceTextInActiveInput(cleanText) ?: false
                     if (replaced) {
@@ -363,17 +511,15 @@ class FloatingOverlayService : Service() {
         popupOverlayView = view
         windowManager?.addView(view, overlayParams)
 
-        // Once the overlay window has focus, pick best available text and auto-translate!
         view.postDelayed({
-            val initialText = when {
-                !explicitText.isNullOrBlank() -> explicitText.trim()
-                activeInputText.isNotBlank() -> activeInputText
-                tappedMessageText.isNotBlank() -> tappedMessageText
-                else -> {
-                    val clip = readClipboardText()
-                    if (clip.isNotBlank()) clip else BnEngAccessibilityService.instance?.lastCapturedText ?: ""
-                }
-            }
+            val candidates = listOf(
+                explicitText?.trim() ?: "",
+                activeInputText,
+                tappedMessageText,
+                readClipboardText(),
+                BnEngAccessibilityService.instance?.lastCapturedText ?: ""
+            )
+            val initialText = candidates.firstOrNull { it.isNotBlank() && !isSensitiveSecret(it) } ?: ""
             if (initialText.isNotBlank()) {
                 etInput.setText(initialText)
                 etInput.setSelection(initialText.length)
@@ -387,15 +533,15 @@ class FloatingOverlayService : Service() {
         instance = null
         serviceScope.cancel()
         hideTranslatorOverlay()
-        if (floatingView != null) {
-            try {
-                windowManager?.removeView(floatingView)
-            } catch (_: Exception) {}
-            floatingView = null
-        }
+        hideFloatingBubble()
     }
 
     companion object {
+        const val ACTION_SHOW_BUBBLE = "com.bneng.assistant.ACTION_SHOW_BUBBLE"
+        const val ACTION_HIDE_BUBBLE = "com.bneng.assistant.ACTION_HIDE_BUBBLE"
+        const val ACTION_OPEN_POPUP = "com.bneng.assistant.ACTION_OPEN_POPUP"
+        const val EXTRA_TEXT = "extra_text"
+
         var instance: FloatingOverlayService? = null
     }
 }

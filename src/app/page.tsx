@@ -239,6 +239,13 @@ export default function HomePage() {
         {activeTab === "apk" && <ApkDownloadGuide />}
       </main>
 
+      {/* Developer Credit Footer */}
+      <footer className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 border-t border-border/40 text-center">
+        <p className="text-xs text-muted-foreground">
+          Developed by <span className="font-semibold text-foreground">MH Parvej</span>
+        </p>
+      </footer>
+
       {/* API Key Modal */}
       <ApiKeySettingsModal
         isOpen={isSettingsOpen}
