@@ -1,25 +1,18 @@
 package com.bneng.assistant.service
 
 import android.accessibilityservice.AccessibilityService
-import android.content.ClipboardManager
-import android.content.Context
-import android.content.Intent
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
-import android.widget.Toast
-import com.bneng.assistant.ProcessTextActivity
-import com.bneng.assistant.utils.PrefManager
 
 class BnEngAccessibilityService : AccessibilityService() {
 
-    private lateinit var prefs: PrefManager
     private var lastEditableNode: AccessibilityNodeInfo? = null
     var lastCapturedText: String = ""
+        private set
 
     override fun onCreate() {
         super.onCreate()
-        prefs = PrefManager(this)
         instance = this
     }
 
@@ -34,7 +27,7 @@ class BnEngAccessibilityService : AccessibilityService() {
 
         if (source.isEditable) {
             lastEditableNode = source
-            val txt = source.text?.toString()
+            val txt = source.text?.toString()?.trim()
             if (!txt.isNullOrBlank()) {
                 lastCapturedText = txt
             }
@@ -45,7 +38,7 @@ class BnEngAccessibilityService : AccessibilityService() {
 
     private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
         if (node == null) return null
-        if (node.isEditable) return node
+        if (node.isEditable && node.isVisibleToUser) return node
         for (i in 0 until node.childCount) {
             val child = node.getChild(i)
             val found = findEditableNode(child)
@@ -54,47 +47,37 @@ class BnEngAccessibilityService : AccessibilityService() {
         return null
     }
 
-    /**
-     * Triggered when the user taps the floating button
-     */
-    fun onFloatingButtonClicked(context: Context) {
+    private fun getFocusedOrEditableNode(): AccessibilityNodeInfo? {
         val rootNode = rootInActiveWindow
-        val editable = findEditableNode(rootNode) ?: lastEditableNode
-
-        var targetText = editable?.text?.toString()?.trim() ?: ""
-
-        // If input box is empty, check clipboard
-        if (targetText.isBlank()) {
-            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = clipboard.primaryClip
-            if (clip != null && clip.itemCount > 0) {
-                targetText = clip.getItemAt(0).text?.toString()?.trim() ?: ""
-            }
+        val focused = rootNode?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+        if (focused != null && focused.isEditable) {
+            return focused
         }
-
-        if (targetText.isBlank()) {
-            targetText = lastCapturedText
+        val editableInTree = findEditableNode(rootNode)
+        if (editableInTree != null) {
+            return editableInTree
         }
-
-        if (targetText.isBlank()) {
-            Toast.makeText(this, "যেকোনো মেসেজ কপি করুন অথবা চ্যাট বক্সে কিছু লিখুন", Toast.LENGTH_SHORT).show()
-            targetText = "Hello! Can I help you?"
-        }
-
-        // Open the floating translation dialog directly on screen!
-        val intent = Intent(context, ProcessTextActivity::class.java).apply {
-            action = Intent.ACTION_PROCESS_TEXT
-            type = "text/plain"
-            putExtra(Intent.EXTRA_PROCESS_TEXT, targetText)
-            putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, editable == null)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        context.startActivity(intent)
+        return lastEditableNode
     }
 
+    /**
+     * Reads text currently typed inside the active WhatsApp / Business Suite / Messenger chat box.
+     */
+    fun getActiveInputText(): String {
+        val editable = getFocusedOrEditableNode()
+        val liveText = editable?.text?.toString()?.trim() ?: ""
+        if (liveText.isNotBlank()) {
+            lastCapturedText = liveText
+            return liveText
+        }
+        return ""
+    }
+
+    /**
+     * Replaces text directly inside the active chat box (WhatsApp, Meta Business Suite, Messenger).
+     */
     fun replaceTextInActiveInput(newText: String): Boolean {
-        val rootNode = rootInActiveWindow
-        val editable = findEditableNode(rootNode) ?: lastEditableNode
+        val editable = getFocusedOrEditableNode()
         if (editable != null && editable.isEditable) {
             val arguments = Bundle().apply {
                 putCharSequence(

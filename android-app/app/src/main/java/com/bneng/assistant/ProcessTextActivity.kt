@@ -6,6 +6,8 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
@@ -13,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import com.bneng.assistant.ai.AiTranslatorClient
 import com.bneng.assistant.ai.TranslationResult
 import com.bneng.assistant.databinding.ActivityProcessTextBinding
+import com.bneng.assistant.service.BnEngAccessibilityService
 import com.bneng.assistant.utils.PrefManager
 import kotlinx.coroutines.launch
 
@@ -30,8 +33,12 @@ class ProcessTextActivity : AppCompatActivity() {
 
         prefs = PrefManager(this)
 
-        originalSelectedText = intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString() ?: ""
-        isReadOnly = intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false)
+        // Support BOTH ACTION_PROCESS_TEXT and ACTION_SEND (Share menu in Meta Business Suite / WhatsApp)
+        originalSelectedText = when (intent.action) {
+            Intent.ACTION_SEND -> intent.getStringExtra(Intent.EXTRA_TEXT)?.trim() ?: ""
+            else -> intent.getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT)?.toString()?.trim() ?: ""
+        }
+        isReadOnly = intent.getBooleanExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, intent.action == Intent.ACTION_SEND)
 
         binding.btnClose.setOnClickListener { finish() }
 
@@ -48,11 +55,13 @@ class ProcessTextActivity : AppCompatActivity() {
         binding.progressBar.visibility = View.VISIBLE
         binding.containerResult.visibility = View.GONE
 
+        val (effectiveProvider, effectiveKey) = prefs.getEffectiveProviderAndKey()
+
         lifecycleScope.launch {
             val result = AiTranslatorClient.translateOrPolish(
                 text = originalSelectedText,
-                apiKey = prefs.apiKey,
-                provider = prefs.provider
+                apiKey = effectiveKey,
+                provider = effectiveProvider
             )
 
             binding.progressBar.visibility = View.GONE
@@ -92,8 +101,13 @@ class ProcessTextActivity : AppCompatActivity() {
                     setupReplyButton(binding.btnOptionConcise, "Short: ${clean(replies.concise)}", clean(replies.concise))
                 }
                 is TranslationResult.Error -> {
-                    binding.tvHeaderLabel.text = "ত্রুটি:"
+                    binding.tvHeaderLabel.text = "⚠️ ত্রুটি:"
                     binding.tvMainText.text = result.message
+                    binding.tvOptionsLabel.visibility = View.GONE
+                    binding.btnOptionCasual.visibility = View.GONE
+                    binding.btnOptionProfessional.visibility = View.GONE
+                    binding.btnOptionPolite.visibility = View.GONE
+                    binding.btnOptionConcise.visibility = View.GONE
                 }
             }
         }
@@ -123,16 +137,22 @@ class ProcessTextActivity : AppCompatActivity() {
                 replaced = true
             }
 
-            // Also try in-place replacement via accessibility service (for Business Suite, WhatsApp, etc.)
-            val accReplaced = com.bneng.assistant.service.BnEngAccessibilityService.instance?.replaceTextInActiveInput(actualEnglishText) ?: false
-            if (accReplaced) replaced = true
-
-            if (replaced) {
-                Toast.makeText(this, "✨ ইংরেজি রিপ্লেস ও কপি হয়েছে!", Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, "ইংরেজি কপি হয়েছে (চ্যাট বক্সে পেস্ট করুন)", Toast.LENGTH_SHORT).show()
-            }
             finish()
+
+            // Wait 180ms for host app to regain focus, then try accessibility replace if not already replaced
+            if (!replaced) {
+                val appContext = applicationContext
+                Handler(Looper.getMainLooper()).postDelayed({
+                    val accReplaced = BnEngAccessibilityService.instance?.replaceTextInActiveInput(actualEnglishText) ?: false
+                    if (accReplaced) {
+                        Toast.makeText(appContext, "✨ ইংরেজি রিপ্লেস ও কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                    } else {
+                        Toast.makeText(appContext, "✅ ইংরেজি কপি হয়েছে (চ্যাট বক্সে পেস্ট করুন)", Toast.LENGTH_SHORT).show()
+                    }
+                }, 180)
+            } else {
+                Toast.makeText(applicationContext, "✨ ইংরেজি রিপ্লেস ও কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 }

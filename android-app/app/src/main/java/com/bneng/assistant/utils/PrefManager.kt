@@ -22,6 +22,15 @@ class PrefManager(context: Context) {
     val apiKey: String
         get() = if (provider == "groq") groqApiKey else geminiApiKey
 
+    fun getEffectiveProviderAndKey(): Pair<String, String> {
+        val primaryKey = if (provider == "groq") groqApiKey.trim() else geminiApiKey.trim()
+        if (primaryKey.isNotBlank()) return Pair(provider, primaryKey)
+        // Auto-fallback to whichever provider has a saved key
+        if (groqApiKey.trim().isNotBlank()) return Pair("groq", groqApiKey.trim())
+        if (geminiApiKey.trim().isNotBlank()) return Pair("gemini", geminiApiKey.trim())
+        return Pair(provider, "")
+    }
+
     var isFloatingEnabled: Boolean
         get() = prefs.getBoolean("floating_enabled", false)
         set(value) = prefs.edit().putBoolean("floating_enabled", value).apply()

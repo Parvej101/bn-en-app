@@ -49,9 +49,11 @@ object AiTranslatorClient {
     ): TranslationResult = withContext(Dispatchers.IO) {
         val english = isEnglish(text)
 
-        // If no API key is provided, return smart high quality mock response
+        // NEVER return fake/mock translation. Require a valid API key.
         if (apiKey.isBlank()) {
-            return@withContext getMockResponse(text, english)
+            return@withContext TranslationResult.Error(
+                "কোনো API Key সেট করা নেই! অনুগ্রহ করে BN-ENG Assistant অ্যাপ ওপেন করে আপনার Gemini অথবা Groq API Key পেস্ট করে 'সংরক্ষণ করুন' চাপুন।"
+            )
         }
 
         try {
@@ -281,41 +283,5 @@ Respond ONLY in strict JSON:
             }
         }
         throw lastException ?: RuntimeException("All Groq models failed")
-    }
-
-    private fun getMockResponse(text: String, isEnglish: Boolean): TranslationResult {
-        return if (isEnglish) {
-            TranslationResult.EnglishToBangla(
-                BanglaQuickViewResponse(
-                    originalText = text,
-                    banglaTranslation = "এই ইংরেজি বার্তার অর্থ: আপনার সময়সূচী বা কাজের অগ্রগতি সম্পর্কে জানতে চাওয়া হয়েছে।",
-                    contextSummary = "পেশাদার ও বন্ধুত্বপূর্ণ বার্তা।",
-                    sentiment = "friendly",
-                    wordBreakdowns = listOf(
-                        WordBreakdown("reschedule", "পুনর্নির্ধারণ করা"),
-                        WordBreakdown("convenient", "সুবিধাজনক")
-                    ),
-                    suggestedEnglishReplies = SuggestedEnglishReplies(
-                        casual = "Sure, tomorrow at 5 works great for me!",
-                        professional = "Tomorrow at 5:00 PM is suitable for our team. Thank you.",
-                        polite = "Could we please connect tomorrow at 5:00 PM if convenient for you?",
-                        concise = "Tomorrow 5 PM confirmed."
-                    )
-                )
-            )
-        } else {
-            TranslationResult.BanglishToEnglish(
-                BanglishToEnglishResponse(
-                    originalBanglish = text,
-                    detectedBanglishMeaning = "আপনি আগামীকালের মিটিং ৫টায় করার অনুরোধ জানাচ্ছেন।",
-                    replies = SuggestedEnglishReplies(
-                        casual = "Hey, could we do the meeting tomorrow at 5? I'll be a bit busy earlier.",
-                        professional = "Would it be possible to reschedule our meeting to 5:00 PM tomorrow? I have a prior commitment.",
-                        polite = "I would be very grateful if we could meet tomorrow at 5:00 PM, as I have an engagement earlier.",
-                        concise = "Can we meet tomorrow at 5 PM instead? Busy earlier."
-                    )
-                )
-            )
-        }
     }
 }
