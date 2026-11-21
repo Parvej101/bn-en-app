@@ -1,23 +1,21 @@
 package com.bneng.assistant.service
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ClipboardManager
+import android.content.Context
+import android.content.Intent
 import android.os.Bundle
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.Toast
-import com.bneng.assistant.ai.AiTranslatorClient
-import com.bneng.assistant.ai.TranslationResult
+import com.bneng.assistant.ProcessTextActivity
 import com.bneng.assistant.utils.PrefManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 
 class BnEngAccessibilityService : AccessibilityService() {
 
-    private val serviceScope = CoroutineScope(Dispatchers.Main + SupervisorJob())
     private lateinit var prefs: PrefManager
+    private var lastEditableNode: AccessibilityNodeInfo? = null
+    var lastCapturedText: String = ""
 
     override fun onCreate() {
         super.onCreate()
@@ -31,55 +29,82 @@ class BnEngAccessibilityService : AccessibilityService() {
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
-        // Can monitor focused input in WhatsApp/Messenger if desired
+        if (event == null) return
+        val source = event.source ?: return
+
+        if (source.isEditable) {
+            lastEditableNode = source
+            val txt = source.text?.toString()
+            if (!txt.isNullOrBlank()) {
+                lastCapturedText = txt
+            }
+        }
     }
 
     override fun onInterrupt() {}
 
+    private fun findEditableNode(node: AccessibilityNodeInfo?): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isEditable) return node
+        for (i in 0 until node.childCount) {
+            val child = node.getChild(i)
+            val found = findEditableNode(child)
+            if (found != null) return found
+        }
+        return null
+    }
+
     /**
-     * Replaces the currently focused input field with polished English text
+     * Triggered when the user taps the floating button
      */
-    fun polishAndReplaceCurrentInput() {
-        val rootNode = rootInActiveWindow ?: return
-        val focusedNode = rootNode.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+    fun onFloatingButtonClicked(context: Context) {
+        val rootNode = rootInActiveWindow
+        val editable = findEditableNode(rootNode) ?: lastEditableNode
 
-        if (focusedNode == null || !focusedNode.isEditable) {
-            Toast.makeText(this, "চ্যাট বক্স ফোকাস করা নেই", Toast.LENGTH_SHORT).show()
-            return
-        }
+        var targetText = editable?.text?.toString()?.trim() ?: ""
 
-        val rawText = focusedNode.text?.toString() ?: ""
-        if (rawText.isBlank()) {
-            Toast.makeText(this, "ইনপুট বক্সে কিছু লিখুন", Toast.LENGTH_SHORT).show()
-            return
-        }
-
-        Toast.makeText(this, "AI ইংরেজি তৈরি করছে...", Toast.LENGTH_SHORT).show()
-
-        serviceScope.launch {
-            val result = withContext(Dispatchers.IO) {
-                AiTranslatorClient.translateOrPolish(rawText, prefs.apiKey, prefs.provider)
-            }
-
-            val replacementText = when (result) {
-                is TranslationResult.BanglishToEnglish -> result.data.replies.casual
-                is TranslationResult.EnglishToBangla -> result.data.suggestedEnglishReplies?.casual ?: result.data.banglaTranslation
-                is TranslationResult.Error -> null
-            }
-
-            if (!replacementText.isNullOrBlank()) {
-                val arguments = Bundle().apply {
-                    putCharSequence(
-                        AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
-                        replacementText
-                    )
-                }
-                val success = focusedNode.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
-                if (success) {
-                    Toast.makeText(this@BnEngAccessibilityService, "✨ ইন-প্লেস রিপ্লেস সম্পন্ন!", Toast.LENGTH_SHORT).show()
-                }
+        // If input box is empty, check clipboard
+        if (targetText.isBlank()) {
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = clipboard.primaryClip
+            if (clip != null && clip.itemCount > 0) {
+                targetText = clip.getItemAt(0).text?.toString()?.trim() ?: ""
             }
         }
+
+        if (targetText.isBlank()) {
+            targetText = lastCapturedText
+        }
+
+        if (targetText.isBlank()) {
+            Toast.makeText(this, "যেকোনো মেসেজ কপি করুন অথবা চ্যাট বক্সে কিছু লিখুন", Toast.LENGTH_SHORT).show()
+            targetText = "Hello! Can I help you?"
+        }
+
+        // Open the floating translation dialog directly on screen!
+        val intent = Intent(context, ProcessTextActivity::class.java).apply {
+            action = Intent.ACTION_PROCESS_TEXT
+            type = "text/plain"
+            putExtra(Intent.EXTRA_PROCESS_TEXT, targetText)
+            putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, editable == null)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        context.startActivity(intent)
+    }
+
+    fun replaceTextInActiveInput(newText: String): Boolean {
+        val rootNode = rootInActiveWindow
+        val editable = findEditableNode(rootNode) ?: lastEditableNode
+        if (editable != null && editable.isEditable) {
+            val arguments = Bundle().apply {
+                putCharSequence(
+                    AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE,
+                    newText
+                )
+            }
+            return editable.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, arguments)
+        }
+        return false
     }
 
     companion object {

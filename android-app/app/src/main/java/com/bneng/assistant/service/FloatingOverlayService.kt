@@ -106,8 +106,24 @@ class FloatingOverlayService : Service() {
                     }
                     MotionEvent.ACTION_UP -> {
                         if (isClick) {
-                            // Trigger in-place polish via accessibility service if available
-                            BnEngAccessibilityService.instance?.polishAndReplaceCurrentInput()
+                            if (BnEngAccessibilityService.instance != null) {
+                                BnEngAccessibilityService.instance?.onFloatingButtonClicked(this@FloatingOverlayService)
+                            } else {
+                                // Fallback: open dialog with clipboard text or sample text
+                                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                                val clip = clipboard.primaryClip
+                                val clipText = if (clip != null && clip.itemCount > 0) clip.getItemAt(0).text?.toString()?.trim() ?: "" else ""
+                                val target = if (clipText.isNotBlank()) clipText else "Hello! How can I help you?"
+
+                                val intent = Intent(this@FloatingOverlayService, com.bneng.assistant.ProcessTextActivity::class.java).apply {
+                                    action = Intent.ACTION_PROCESS_TEXT
+                                    type = "text/plain"
+                                    putExtra(Intent.EXTRA_PROCESS_TEXT, target)
+                                    putExtra(Intent.EXTRA_PROCESS_TEXT_READONLY, false)
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                                }
+                                startActivity(intent)
+                            }
                         }
                         return true
                     }

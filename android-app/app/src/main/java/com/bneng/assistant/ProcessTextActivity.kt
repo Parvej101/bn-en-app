@@ -107,19 +107,30 @@ class ProcessTextActivity : AppCompatActivity() {
         button.visibility = View.VISIBLE
         button.text = displayText
         button.setOnClickListener {
+            // Always copy to clipboard so user can paste anywhere
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("English Reply", actualEnglishText)
+            clipboard.setPrimaryClip(clip)
+
+            var replaced = false
+
+            // If triggered by native ACTION_PROCESS_TEXT from an editable field
             if (!isReadOnly) {
-                // In-place text replacement in WhatsApp / Messenger input box!
                 val returnIntent = Intent().apply {
                     putExtra(Intent.EXTRA_PROCESS_TEXT, actualEnglishText)
                 }
                 setResult(Activity.RESULT_OK, returnIntent)
-                Toast.makeText(this, "ইংরেজি রিপ্লেস করা হয়েছে!", Toast.LENGTH_SHORT).show()
+                replaced = true
+            }
+
+            // Also try in-place replacement via accessibility service (for Business Suite, WhatsApp, etc.)
+            val accReplaced = com.bneng.assistant.service.BnEngAccessibilityService.instance?.replaceTextInActiveInput(actualEnglishText) ?: false
+            if (accReplaced) replaced = true
+
+            if (replaced) {
+                Toast.makeText(this, "✨ ইংরেজি রিপ্লেস ও কপি হয়েছে!", Toast.LENGTH_SHORT).show()
             } else {
-                // Readonly message -> Copy to clipboard
-                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                val clip = ClipData.newPlainText("English Reply", actualEnglishText)
-                clipboard.setPrimaryClip(clip)
-                Toast.makeText(this, "ক্লিপবোর্ডে কপি হয়েছে!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "ইংরেজি কপি হয়েছে (চ্যাট বক্সে পেস্ট করুন)", Toast.LENGTH_SHORT).show()
             }
             finish()
         }
