@@ -29,6 +29,17 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Ensure Permanent Keystore Exists for 1-Click Updates
+        run: |
+          if [ ! -f "android-app/app/signing.keystore" ]; then
+            keytool -genkeypair -v -keystore android-app/app/signing.keystore -alias androidkey -keyalg RSA -keysize 2048 -validity 10000 -storepass androidpassword -keypass androidpassword -dname "CN=BN-ENG, OU=Assistant, O=App, L=Dhaka, C=BD"
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "github-actions[bot]@users.noreply.github.com"
+            git add android-app/app/signing.keystore
+            git commit -m "chore: persist permanent signing keystore for 1-click updates" || true
+            git push origin main || true
+          fi
+
       - name: Build Debug APK with Gradle
         working-directory: android-app
         run: gradle assembleDebug --no-daemon --stacktrace

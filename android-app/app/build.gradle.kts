@@ -7,23 +7,45 @@ android {
     namespace = "com.bneng.assistant"
     compileSdk = 34
 
+    signingConfigs {
+        create("release") {
+            val kFile = file("signing.keystore")
+            if (kFile.exists()) {
+                storeFile = kFile
+                storePassword = "androidpassword"
+                keyAlias = "androidkey"
+                keyPassword = "androidpassword"
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "com.bneng.assistant"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.0.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            val rSigning = signingConfigs.findByName("release")
+            if (rSigning != null && file("signing.keystore").exists()) {
+                signingConfig = rSigning
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
             )
+            val rSigning = signingConfigs.findByName("release")
+            if (rSigning != null && file("signing.keystore").exists()) {
+                signingConfig = rSigning
+            }
         }
     }
     compileOptions {
