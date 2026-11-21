@@ -47,6 +47,15 @@ class MainActivity : AppCompatActivity() {
         }
         binding.switchFloating.isChecked = prefs.isFloatingEnabled
         binding.tvAppVersion.text = "অ্যাপ ভার্সন: v${AppUpdater.getCurrentVersionName(this)}"
+
+        // Auto-ensure floating bubble service is running if user enabled it
+        if (prefs.isFloatingEnabled && (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))) {
+            if (FloatingOverlayService.instance == null) {
+                try {
+                    startService(Intent(this, FloatingOverlayService::class.java))
+                } catch (_: Exception) {}
+            }
+        }
     }
 
     private fun setupListeners() {

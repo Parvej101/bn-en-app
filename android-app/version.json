@@ -1,6 +1,6 @@
 {
-  "versionCode": 7,
-  "versionName": "1.0.6",
+  "versionCode": 8,
+  "versionName": "1.0.7",
   "apkUrl": "https://github.com/Parvej101/bn-en-app/releases/download/latest-apk/BN-ENG-Assistant.apk",
-  "releaseNotes": "ফ্লোটিং বাটন ক্র্যাশ ফিক্স (MIUI/Android 14+), Groq অটো মডেল ডিসকভারি ফিক্স!"
+  "releaseNotes": "WhatsApp/Business Suite-এ মেসেজ লং-প্রেস (সিলেক্ট) করলেই কপি ছাড়াই অটো বাংলা অর্থ পপআপ + /e ইনস্ট্যান্ট ইংরেজি!"
 }

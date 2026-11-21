@@ -34,6 +34,17 @@ class BnEngAccessibilityService : AccessibilityService() {
     private var isProcessingShortcut: Boolean = false
     private var lastShortcutTimestamp: Long = 0L
 
+    private val chatPackages = setOf(
+        "com.whatsapp",
+        "com.whatsapp.w4b",
+        "com.facebook.pages.app",
+        "com.facebook.orca",
+        "com.facebook.katana",
+        "org.telegram.messenger"
+    )
+
+    private var lastAutoPopupTime: Long = 0L
+
     private val ignoredUiLabels = setOf(
         "copy", "paste", "cut", "reply", "remove", "details", "pin", "report",
         "forward", "delete", "star", "send", "translate", "ask meta ai",
@@ -64,10 +75,29 @@ class BnEngAccessibilityService : AccessibilityService() {
             AccessibilityEvent.TYPE_VIEW_LONG_CLICKED,
             AccessibilityEvent.TYPE_VIEW_SELECTED -> {
                 if (!source.isEditable) {
-                    val extracted = extractMeaningfulText(source)
+                    var extracted = extractMeaningfulText(source)
+                    if (extracted.isBlank()) {
+                        val eventJoined = event.text?.joinToString(" ")?.trim() ?: ""
+                        if (eventJoined.length >= 4 && !ignoredUiLabels.contains(eventJoined.lowercase())) {
+                            extracted = eventJoined
+                        }
+                    }
                     if (extracted.isNotBlank()) {
                         lastSelectedMessageText = extracted
                         lastSelectedMessageTime = System.currentTimeMillis()
+
+                        // In WhatsApp / Meta Business Suite / Messenger: long-pressing (selecting) a message
+                        // immediately opens the Bangla translation & reply popup — ZERO copy/paste needed!
+                        val pkg = event.packageName?.toString() ?: ""
+                        val now = System.currentTimeMillis()
+                        if (event.eventType == AccessibilityEvent.TYPE_VIEW_LONG_CLICKED &&
+                            chatPackages.contains(pkg) &&
+                            extracted.length >= 4 &&
+                            now - lastAutoPopupTime > 1500L
+                        ) {
+                            lastAutoPopupTime = now
+                            FloatingOverlayService.instance?.openWithText(extracted)
+                        }
                     }
                 } else {
                     lastEditableNode = source
