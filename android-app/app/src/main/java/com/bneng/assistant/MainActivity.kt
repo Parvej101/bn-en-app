@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -13,13 +14,16 @@ import com.bneng.assistant.ai.AiTranslatorClient
 import com.bneng.assistant.ai.TranslationResult
 import com.bneng.assistant.databinding.ActivityMainBinding
 import com.bneng.assistant.service.FloatingOverlayService
+import com.bneng.assistant.utils.AppUpdater
 import com.bneng.assistant.utils.PrefManager
+import com.bneng.assistant.utils.UpdateInfo
 import kotlinx.coroutines.launch
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var prefs: PrefManager
+    private var latestUpdateInfo: UpdateInfo? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,6 +34,7 @@ class MainActivity : AppCompatActivity() {
 
         setupUI()
         setupListeners()
+        checkForAppUpdate(silent = true)
     }
 
     private fun setupUI() {
@@ -41,6 +46,7 @@ class MainActivity : AppCompatActivity() {
             binding.etApiKey.setText(prefs.geminiApiKey)
         }
         binding.switchFloating.isChecked = prefs.isFloatingEnabled
+        binding.tvAppVersion.text = "অ্যাপ ভার্সন: v${AppUpdater.getCurrentVersionName(this)}"
     }
 
     private fun setupListeners() {
@@ -157,6 +163,99 @@ class MainActivity : AppCompatActivity() {
                 startService(Intent(this, FloatingOverlayService::class.java))
             } else {
                 stopService(Intent(this, FloatingOverlayService::class.java))
+            }
+        }
+
+        // Manual Check Update button
+        binding.btnCheckUpdate.setOnClickListener {
+            checkForAppUpdate(silent = false)
+        }
+
+        // 1-Click Update Now Banner Button
+        binding.btnUpdateNow.setOnClickListener {
+            val info = latestUpdateInfo
+            if (info != null) {
+                startInAppUpdate(info)
+            } else {
+                checkForAppUpdate(silent = false)
+            }
+        }
+    }
+
+    private fun checkForAppUpdate(silent: Boolean) {
+        if (!silent) {
+            Toast.makeText(this, "আপডেট চেক করা হচ্ছে...", Toast.LENGTH_SHORT).show()
+        }
+        lifecycleScope.launch {
+            val result = AppUpdater.checkForUpdate(this@MainActivity)
+            result.onSuccess { info ->
+                if (info.isUpdateAvailable) {
+                    latestUpdateInfo = info
+                    binding.cardUpdateBanner.visibility = View.VISIBLE
+                    binding.tvUpdateTitle.text = "🚀 নতুন আপডেট এসেছে! (v${info.versionName})"
+                    binding.tvUpdateNotes.text = info.releaseNotes
+
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("🚀 নতুন আপডেট পাওয়া গেছে (v${info.versionName})")
+                        .setMessage("${info.releaseNotes}\n\nএখনই ১-ক্লিকে আপডেট করতে চান?")
+                        .setPositiveButton("এখনই আপডেট করুন") { _, _ ->
+                            startInAppUpdate(info)
+                        }
+                        .setNegativeButton("পরে করব", null)
+                        .show()
+                } else {
+                    binding.cardUpdateBanner.visibility = View.GONE
+                    if (!silent) {
+                        Toast.makeText(
+                            this@MainActivity,
+                            "✅ আপনার অ্যাপটি সর্বশেষ ভার্সনে (v${AppUpdater.getCurrentVersionName(this@MainActivity)}) আছে!",
+                            Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
+            }.onFailure { err ->
+                if (!silent) {
+                    Toast.makeText(
+                        this@MainActivity,
+                        "আপডেট চেক ব্যর্থ: ${err.localizedMessage}",
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+        }
+    }
+
+    private fun startInAppUpdate(info: UpdateInfo) {
+        if (!AppUpdater.canInstallPackages(this)) {
+            AlertDialog.Builder(this)
+                .setTitle("ইনস্টল পারমিশন প্রয়োজন")
+                .setMessage("অ্যাপের ভেতর থেকে সরাসরি আপডেট ইনস্টল করার জন্য 'Allow from this source' অনুমতিটি একবার অন করে দিন।")
+                .setPositiveButton("সেটিংসে যান") { _, _ ->
+                    AppUpdater.openInstallPermissionSettings(this)
+                }
+                .setNegativeButton("বাতিল", null)
+                .show()
+            return
+        }
+
+        val downloadDialog = AlertDialog.Builder(this)
+            .setTitle("⬇️ আপডেট ডাউনলোড হচ্ছে (v${info.versionName})")
+            .setMessage("ডাউনলোড শুরু হচ্ছে... ০%")
+            .setCancelable(false)
+            .create()
+        downloadDialog.show()
+
+        lifecycleScope.launch {
+            val res = AppUpdater.downloadAndInstallApk(this@MainActivity, info.apkUrl) { percent ->
+                downloadDialog.setMessage("নতুন APK ডাউনলোড হচ্ছে... $percent%\nসম্পন্ন হলেই অটোমেটিক Update স্ক্রিন আসবে।")
+            }
+            downloadDialog.dismiss()
+            res.onFailure { err ->
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle("❌ ডাউনলোড ব্যর্থ হয়েছে")
+                    .setMessage("সমস্যা: ${err.localizedMessage}\n\nইন্টারনেট সংযোগ চেক করে আবার চেষ্টা করুন।")
+                    .setPositiveButton("ঠিক আছে", null)
+                    .show()
             }
         }
     }
