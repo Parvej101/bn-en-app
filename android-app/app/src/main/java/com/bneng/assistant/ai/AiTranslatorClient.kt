@@ -61,8 +61,8 @@ object AiTranslatorClient {
                 callGemini(text, apiKey, english)
             }
         } catch (e: Exception) {
-            // Fallback gracefully on network / token issues
-            getMockResponse(text, english)
+            // When an API key was provided, report the real error clearly
+            TranslationResult.Error("AI রিকোয়েস্ট ব্যর্থ: ${e.localizedMessage ?: e.message}")
         }
     }
 
