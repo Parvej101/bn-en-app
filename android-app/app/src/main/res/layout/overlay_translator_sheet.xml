@@ -25,13 +25,19 @@
             android:orientation="horizontal"
             android:layout_marginBottom="10dp">
 
-            <ImageView
-                android:layout_width="28dp"
-                android:layout_height="28dp"
+            <FrameLayout
+                android:layout_width="30dp"
+                android:layout_height="30dp"
                 android:layout_marginEnd="8dp"
-                android:contentDescription="BN-ENG Logo"
-                android:scaleType="centerCrop"
-                android:src="@mipmap/ic_launcher_round" />
+                android:background="@drawable/rounded_brand_bg">
+                <ImageView
+                    android:layout_width="30dp"
+                    android:layout_height="30dp"
+                    android:layout_gravity="center"
+                    android:contentDescription="BN-ENG Logo"
+                    android:scaleType="centerInside"
+                    android:src="@drawable/ic_launcher_foreground" />
+            </FrameLayout>
 
             <TextView
                 android:layout_width="0dp"

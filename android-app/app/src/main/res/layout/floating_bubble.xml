@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="56dp"
-    android:layout_height="56dp"
+    android:layout_width="52dp"
+    android:layout_height="52dp"
     android:background="@drawable/rounded_brand_bg"
-    android:elevation="12dp"
-    android:padding="2dp">
+    android:elevation="12dp">
 
     <ImageView
         android:id="@+id/ivBubbleLogo"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        android:layout_gravity="center"
         android:contentDescription="BN-ENG AI Assistant"
-        android:scaleType="centerCrop"
-        android:src="@mipmap/ic_launcher_round" />
+        android:scaleType="centerInside"
+        android:src="@drawable/ic_launcher_foreground" />
 </FrameLayout>
