@@ -52,10 +52,18 @@ class FloatingOverlayService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        instance = this
         prefs = PrefManager(this)
         windowManager = getSystemService(Context.WINDOW_SERVICE) as WindowManager
         startAsForeground()
         setupFloatingBubble()
+    }
+
+    fun openWithText(explicitText: String?) {
+        mainHandler.post {
+            hideTranslatorOverlay()
+            showTranslatorOverlay(explicitText)
+        }
     }
 
     private fun startAsForeground() {
@@ -185,9 +193,10 @@ class FloatingOverlayService : Service() {
         }
     }
 
-    private fun showTranslatorOverlay() {
-        // Capture active input box text BEFORE opening our overlay window
+    private fun showTranslatorOverlay(explicitText: String? = null) {
+        // Capture active input box text & recently tapped message BEFORE opening our overlay window
         val activeInputText = BnEngAccessibilityService.instance?.getActiveInputText() ?: ""
+        val tappedMessageText = BnEngAccessibilityService.instance?.getRecentSelectedMessage() ?: ""
 
         val inflater = LayoutInflater.from(ContextThemeWrapper(this, R.style.Theme_BnEngAssistant))
         val view = inflater.inflate(R.layout.overlay_translator_sheet, null)
@@ -334,10 +343,12 @@ class FloatingOverlayService : Service() {
         popupOverlayView = view
         windowManager?.addView(view, overlayParams)
 
-        // Once the overlay window has focus, read clipboard if chat input box was empty and auto-translate!
+        // Once the overlay window has focus, pick best available text and auto-translate!
         view.postDelayed({
             val initialText = when {
+                !explicitText.isNullOrBlank() -> explicitText.trim()
                 activeInputText.isNotBlank() -> activeInputText
+                tappedMessageText.isNotBlank() -> tappedMessageText
                 else -> {
                     val clip = readClipboardText()
                     if (clip.isNotBlank()) clip else BnEngAccessibilityService.instance?.lastCapturedText ?: ""
@@ -353,6 +364,7 @@ class FloatingOverlayService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        instance = null
         serviceScope.cancel()
         hideTranslatorOverlay()
         if (floatingView != null) {
@@ -361,5 +373,9 @@ class FloatingOverlayService : Service() {
             } catch (_: Exception) {}
             floatingView = null
         }
+    }
+
+    companion object {
+        var instance: FloatingOverlayService? = null
     }
 }
